@@ -3,35 +3,37 @@
 ## Vision
 Build a generator-driven Home Assistant energy accounting system with Hungarian tariff support and reusable architecture.
 
-## Current goals
-- Repository structure
-- Generator framework
-- Documentation
-- Example configuration
+## Principles
+- Conventional Commits for every commit.
+- Tests are required for new functionality and bug fixes where practical.
+- No duplicated logic; repetitive Home Assistant YAML is generated, not handwritten.
+- Generated files are artifacts; the generator and configuration model are the source of truth.
+- Comments explain intent and rationale, not mechanics.
+- No project-management terminology such as phases or waves in code or comments.
+- No temporary or TODO comments in production code; future work belongs here or in GitHub issues.
+- Every generated file should make it clear that it is generated and should not be edited manually.
+- Deterministic generation: identical inputs must produce identical outputs.
+- The repository should be understandable on its own without relying on chat history.
 
-## Configuration model
-- Device inventory model
-- Billing configuration
-- Validation
-
-## YAML generation
-- Utility meters
-- Pricing
-- Device costs
-- House totals
-- Diagnostics
-- Projections
-
-## Dashboard output
-- Executive dashboard
-- Device dashboard
-- Solar dashboard
-- Diagnostics dashboard
-
-## Quality and release
-- Tests
-- GitHub Actions
-- Release process
+## Milestones
+- [ ] Repository structure
+- [ ] Generator framework
+- [ ] Configuration model
+- [ ] Documentation
+- [ ] Example configuration
+- [ ] Utility meters
+- [ ] Pricing
+- [ ] Device costs
+- [ ] House totals
+- [ ] Diagnostics
+- [ ] Projections
+- [ ] Executive dashboard
+- [ ] Device dashboard
+- [ ] Solar dashboard
+- [ ] Diagnostics dashboard
+- [ ] Tests
+- [ ] GitHub Actions
+- [ ] Release process
 
 ## Ideas backlog
 - Tariff plugins
@@ -39,17 +41,5 @@ Build a generator-driven Home Assistant energy accounting system with Hungarian 
 - Dynamic pricing
 - Hourly solar-aware attribution
 - EV analytics
-
-## Project principles
-- No duplicated logic; repetitive YAML is generated, not handwritten.
-- Conventional Commits are required for meaningful changes.
-- Tests are required for new functionality and bug fixes where practical.
-- Generated files are artifacts and must not be edited manually.
-- Comments explain intent and constraints, not mechanics.
-- No references to phases, waves, or similar project-stage language in code or comments.
-- No temporary TODO comments in production code; future work belongs in this plan or in GitHub issues.
-- The source of truth is the configuration model and generator, not the generated YAML.
-- Deterministic generation is required: identical inputs must produce identical outputs.
-- Every architectural decision should be discoverable from the repository itself.
 
 This document is intended to be updated over multiple development sessions.

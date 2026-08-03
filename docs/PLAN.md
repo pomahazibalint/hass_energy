@@ -3,35 +3,35 @@
 ## Vision
 Build a generator-driven Home Assistant energy accounting system with Hungarian tariff support and reusable architecture.
 
-## Phase 1 - Bootstrap
-- [ ] Repository structure
-- [ ] Generator framework
-- [ ] Documentation
-- [ ] Example configuration
+## Current goals
+- Repository structure
+- Generator framework
+- Documentation
+- Example configuration
 
-## Phase 2 - Configuration
-- [ ] Device inventory model
-- [ ] Billing configuration
-- [ ] Validation
+## Configuration model
+- Device inventory model
+- Billing configuration
+- Validation
 
-## Phase 3 - YAML generation
-- [ ] Utility meters
-- [ ] Pricing
-- [ ] Device costs
-- [ ] House totals
-- [ ] Diagnostics
-- [ ] Projections
+## YAML generation
+- Utility meters
+- Pricing
+- Device costs
+- House totals
+- Diagnostics
+- Projections
 
-## Phase 4 - Dashboard
-- [ ] Executive dashboard
-- [ ] Device dashboard
-- [ ] Solar dashboard
-- [ ] Diagnostics dashboard
+## Dashboard output
+- Executive dashboard
+- Device dashboard
+- Solar dashboard
+- Diagnostics dashboard
 
-## Phase 5 - Polish
-- [ ] Tests
-- [ ] GitHub Actions
-- [ ] Release process
+## Quality and release
+- Tests
+- GitHub Actions
+- Release process
 
 ## Ideas backlog
 - Tariff plugins
@@ -39,5 +39,17 @@ Build a generator-driven Home Assistant energy accounting system with Hungarian 
 - Dynamic pricing
 - Hourly solar-aware attribution
 - EV analytics
+
+## Project principles
+- No duplicated logic; repetitive YAML is generated, not handwritten.
+- Conventional Commits are required for meaningful changes.
+- Tests are required for new functionality and bug fixes where practical.
+- Generated files are artifacts and must not be edited manually.
+- Comments explain intent and constraints, not mechanics.
+- No references to phases, waves, or similar project-stage language in code or comments.
+- No temporary TODO comments in production code; future work belongs in this plan or in GitHub issues.
+- The source of truth is the configuration model and generator, not the generated YAML.
+- Deterministic generation is required: identical inputs must produce identical outputs.
+- Every architectural decision should be discoverable from the repository itself.
 
 This document is intended to be updated over multiple development sessions.

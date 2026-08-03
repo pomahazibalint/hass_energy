@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
 
 [project]
 name = "hass-energy-accounting"
@@ -20,7 +20,10 @@ dev = [
   "mypy>=1.10",
 ]
 
-[tool.setuptools]
+[project.scripts]
+hass-energy = "generator.cli:main"
+
+[tool.hatch.build.targets.wheel]
 packages = ["generator"]
 
 [tool.ruff]

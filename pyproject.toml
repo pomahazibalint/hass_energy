@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hass-energy-accounting"
+version = "0.1.0"
+description = "Generator-driven Home Assistant energy accounting for annual settlement billing"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "jinja2>=3.1",
+  "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.6",
+  "mypy>=1.10",
+]
+
+[tool.setuptools]
+packages = ["generator"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+strict = true

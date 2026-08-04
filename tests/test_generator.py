@@ -62,6 +62,8 @@ def test_every_generated_file_is_valid_yaml(config: ProjectConfig) -> None:
         "device_costs.yaml",
         "house_totals.yaml",
         "settlement.yaml",
+        "diagnostics.yaml",
+        "projections.yaml",
     ]
     for file in files:
         assert yaml.safe_load(file.content), file.filename
@@ -140,10 +142,16 @@ def test_pricing_uses_the_configured_bands(config: ProjectConfig) -> None:
     assert price["unit_of_measurement"] == "Ft/kWh"
 
 
-def test_the_allowance_is_compared_in_exactly_one_place(config: ProjectConfig) -> None:
-    # Every consumer follows the band sensor, so nothing can disagree with it
-    # about which band is active.
-    comparisons = [s["unique_id"] for s in template_sensors(config) if "2523.0" in s["state"]]
+def test_only_pricing_decides_the_active_band(config: ProjectConfig) -> None:
+    # Costs and diagnostics follow the band sensor rather than re-deciding, so
+    # nothing can disagree with it about which band is active. Projections are
+    # exempt: they band a hypothetical future total, not current consumption.
+    for filename in ("device_costs.yaml", "house_totals.yaml", "diagnostics.yaml"):
+        content = next(f.content for f in generate(config) if f.filename == filename)
+        assert "2523" not in content, filename
+
+    pricing = package(config, "pricing.yaml")["template"][0]["sensor"]
+    comparisons = [s["unique_id"] for s in pricing if "2523.0" in s["state"]]
 
     assert comparisons == [
         "hass_energy_subsidized_energy",

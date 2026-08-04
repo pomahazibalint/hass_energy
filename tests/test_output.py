@@ -20,7 +20,7 @@ def test_write_creates_the_output_directory(tmp_path: Path, config: ProjectConfi
 
     result = write_files(generate(config), output)
 
-    assert len(result.written) == 5
+    assert len(result.written) == len(generate(config))
     assert sorted(p.name for p in output.glob("*.yaml")) == sorted(
         f.filename for f in generate(config)
     )
@@ -32,7 +32,7 @@ def test_write_leaves_unchanged_files_alone(tmp_path: Path, config: ProjectConfi
     result = write_files(generate(config), tmp_path)
 
     assert result.written == ()
-    assert len(result.unchanged) == 5
+    assert len(result.unchanged) == len(generate(config))
     assert result.changed is False
 
 
@@ -69,7 +69,7 @@ def test_check_reports_a_missing_directory(tmp_path: Path, config: ProjectConfig
     result = check_files(generate(config), tmp_path / "absent")
 
     assert result.changed is True
-    assert len(result.written) == 5
+    assert len(result.written) == len(generate(config))
 
 
 def test_check_does_not_touch_the_output(tmp_path: Path, config: ProjectConfig) -> None:

@@ -62,7 +62,7 @@ devices:
     )
 
     assert config.project_name == "home"
-    assert config.billing.settlement_day == 18
+    assert config.billing.settlement_day == 15
     assert config.grid.import_entity == "sensor.grid_import"
     assert config.meters.cycles == ("daily", "monthly", "yearly")
     assert config.devices[0].display_name == "Server"

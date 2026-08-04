@@ -1,6 +1,9 @@
 {
   "domain": "hass_energy",
   "name": "Energy Settlement",
+  "after_dependencies": [
+    "recorder"
+  ],
   "codeowners": [
     "@pomahazibalint"
   ],

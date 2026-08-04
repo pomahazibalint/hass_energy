@@ -4,8 +4,15 @@ from typing import Any
 import pytest
 import yaml
 
-from hass_energy.config import BillingConfig, GridConfig, MeterConfig, ProjectConfig, SolarConfig
-from hass_energy.generator import GENERATORS, GenerationError, Generator, generate
+from hass_energy.config import (
+    BillingConfig,
+    DeviceConfig,
+    GridConfig,
+    MeterConfig,
+    ProjectConfig,
+    SolarConfig,
+)
+from hass_energy.generator import GENERATORS, GenerationError, Generator, generate, inventory
 from hass_energy.generator.pricing import PricingGenerator
 from hass_energy.generator.utility_meters import UtilityMeterGenerator
 
@@ -30,10 +37,7 @@ def template_sensors(config: ProjectConfig) -> list[dict[str, Any]]:
 def generated_entities(config: ProjectConfig) -> set[str]:
     """Entity ids Home Assistant will create from the generated packages."""
 
-    meters = package(config, "utility_meters.yaml")["utility_meter"]
-    entities = {f"sensor.{object_id}" for object_id in meters}
-    entities |= {sensor["default_entity_id"] for sensor in template_sensors(config)}
-    return entities
+    return set(inventory(config))
 
 
 def referenced_entities(config: ProjectConfig) -> set[str]:
@@ -128,10 +132,25 @@ def test_pricing_ignores_export_without_net_metering(config: ProjectConfig) -> N
 
 def test_pricing_uses_the_configured_bands(config: ProjectConfig) -> None:
     sensors = package(config, "pricing.yaml")["template"][0]["sensor"]
+    band = next(s for s in sensors if s["unique_id"] == "hass_energy_price_band")
     price = next(s for s in sensors if s["unique_id"] == "hass_energy_marginal_price")
 
-    assert "36.386 if billed < 2523.0 else 70.104" in price["state"]
+    assert "'subsidized' if billed < 2523.0 else 'unsubsidized'" in band["state"]
+    assert "36.386 if band == 'subsidized' else 70.104" in price["state"]
     assert price["unit_of_measurement"] == "Ft/kWh"
+
+
+def test_the_allowance_is_compared_in_exactly_one_place(config: ProjectConfig) -> None:
+    # Every consumer follows the band sensor, so nothing can disagree with it
+    # about which band is active.
+    comparisons = [s["unique_id"] for s in template_sensors(config) if "2523.0" in s["state"]]
+
+    assert comparisons == [
+        "hass_energy_subsidized_energy",
+        "hass_energy_subsidized_remaining",
+        "hass_energy_unsubsidized_energy",
+        "hass_energy_price_band",
+    ]
 
 
 def test_device_costs_reference_the_marginal_price(config: ProjectConfig) -> None:
@@ -194,7 +213,7 @@ def test_settlement_automation_matches_the_billing_date(config: ProjectConfig) -
 
     assert "now().month == 3 and now().day == 15" in automation["conditions"][0]["value_template"]
     assert automation["actions"][0]["action"] == "utility_meter.calibrate"
-    assert "sensor.hass_energy_device_server_settlement" in (
+    assert "sensor.hass_energy_device_server_settlement_subsidized" in (
         automation["actions"][0]["target"]["entity_id"]
     )
 
@@ -203,7 +222,27 @@ def test_settlement_automation_resets_only_settlement_meters(config: ProjectConf
     automation = package(config, "settlement.yaml")["automation"][0]
 
     for entity in automation["actions"][0]["target"]["entity_id"]:
-        assert entity.endswith("_settlement")
+        assert "_settlement" in entity
+
+
+def test_the_band_automation_mirrors_the_band_sensor(config: ProjectConfig) -> None:
+    automation = package(config, "settlement.yaml")["automation"][1]
+    action = automation["actions"][0]
+
+    assert automation["triggers"][0]["entity_id"] == "sensor.hass_energy_price_band"
+    assert {"trigger": "homeassistant", "event": "start"} in automation["triggers"]
+    assert action["action"] == "select.select_option"
+    assert action["target"]["entity_id"] == [
+        "select.hass_energy_device_heat_pump_settlement",
+        "select.hass_energy_device_server_settlement",
+    ]
+    assert "states('sensor.hass_energy_price_band')" in action["data"]["option"]
+
+
+def test_no_band_automation_without_devices() -> None:
+    config = ProjectConfig(grid=GridConfig(import_entity="sensor.grid_import"))
+
+    assert len(package(config, "settlement.yaml")["automation"]) == 1
 
 
 def test_project_name_prefixes_every_entity() -> None:
@@ -213,7 +252,8 @@ def test_project_name_prefixes_every_entity() -> None:
 
     meters = package(config, "utility_meters.yaml")["utility_meter"]
 
-    assert all(key.startswith("nyaral_") for key in meters)
+    # Accents fold to their base letter rather than being dropped.
+    assert all(key.startswith("nyaralo_") for key in meters)
 
 
 def test_cycles_follow_the_configuration() -> None:
@@ -264,6 +304,103 @@ def test_generated_entity_ids_are_unique(config: ProjectConfig) -> None:
     all_ids = [f"sensor.{object_id}" for object_id in meters] + template_ids
 
     assert len(all_ids) == len(set(all_ids))
+
+
+def test_device_settlement_meters_are_split_into_price_bands(config: ProjectConfig) -> None:
+    meters = package(config, "utility_meters.yaml")["utility_meter"]
+
+    assert meters["hass_energy_device_server_settlement"]["tariffs"] == [
+        "subsidized",
+        "unsubsidized",
+    ]
+    # Shorter cycles change band at most once a year, so they stay unsplit.
+    assert "tariffs" not in meters["hass_energy_device_server_daily"]
+    assert "tariffs" not in meters["hass_energy_grid_import_settlement"]
+
+
+def test_settlement_cost_prices_each_band_separately(config: ProjectConfig) -> None:
+    sensors = package(config, "device_costs.yaml")["template"][0]["sensor"]
+    cost = next(s for s in sensors if s["unique_id"] == "hass_energy_cost_server_settlement")
+
+    assert "sensor.hass_energy_device_server_settlement_subsidized" in cost["state"]
+    assert "sensor.hass_energy_device_server_settlement_unsubsidized" in cost["state"]
+    assert "subsidized * 36.386 + unsubsidized * 70.104" in cost["state"]
+    # The exact figure never goes through the marginal price.
+    assert "marginal_price" not in cost["state"]
+
+
+def test_shorter_cycles_use_the_marginal_price(config: ProjectConfig) -> None:
+    sensors = package(config, "device_costs.yaml")["template"][0]["sensor"]
+    cost = next(s for s in sensors if s["unique_id"] == "hass_energy_cost_server_daily")
+
+    assert "sensor.hass_energy_marginal_price" in cost["state"]
+
+
+def test_settlement_totals_divide_up_the_billed_cost(config: ProjectConfig) -> None:
+    sensors = package(config, "house_totals.yaml")["template"][0]["sensor"]
+    total = next(s for s in sensors if s["unique_id"] == "hass_energy_total_cost_settlement")
+    unmonitored = next(
+        s for s in sensors if s["unique_id"] == "hass_energy_unmonitored_cost_settlement"
+    )
+
+    assert "sensor.hass_energy_settlement_cost" in total["state"]
+    assert "total - measured" in unmonitored["state"]
+
+
+def test_devices_can_override_the_project_cycles(config: ProjectConfig) -> None:
+    devices = (
+        DeviceConfig(id="server", entity="sensor.server_energy", cycles=("yearly",)),
+        DeviceConfig(id="heat_pump", entity="sensor.heat_pump_energy"),
+    )
+    config = config.model_copy(update={"devices": devices})
+
+    meters = package(config, "utility_meters.yaml")["utility_meter"]
+
+    assert "hass_energy_device_server_yearly" in meters
+    assert "hass_energy_device_server_daily" not in meters
+    assert "hass_energy_device_heat_pump_daily" in meters
+
+
+def test_totals_only_sum_devices_that_have_the_cycle(config: ProjectConfig) -> None:
+    devices = (
+        DeviceConfig(id="server", entity="sensor.server_energy", cycles=()),
+        DeviceConfig(id="heat_pump", entity="sensor.heat_pump_energy"),
+    )
+    config = config.model_copy(update={"devices": devices})
+
+    sensors = package(config, "house_totals.yaml")["template"][0]["sensor"]
+    monitored = next(s for s in sensors if s["unique_id"] == "hass_energy_monitored_energy_daily")
+
+    assert "sensor.hass_energy_device_heat_pump_daily" in monitored["state"]
+    assert "server" not in monitored["state"]
+
+
+def test_meter_options_reach_every_meter(config: ProjectConfig) -> None:
+    config = config.model_copy(
+        update={"meters": MeterConfig(cycles=("daily",), net_consumption=True, delta_values=True)}
+    )
+
+    meters = package(config, "utility_meters.yaml")["utility_meter"]
+
+    assert meters["hass_energy_grid_import_daily"]["net_consumption"] is True
+    assert meters["hass_energy_device_server_daily"]["delta_values"] is True
+    assert "always_available" not in meters["hass_energy_device_server_daily"]
+
+
+def test_inventory_lists_band_sensors_and_selects(config: ProjectConfig) -> None:
+    entities = inventory(config)
+
+    assert "sensor.hass_energy_device_server_settlement_subsidized" in entities
+    assert "select.hass_energy_device_server_settlement" in entities
+    # A tariffed meter has no combined sensor.
+    assert "sensor.hass_energy_device_server_settlement" not in entities
+    assert "sensor.hass_energy_marginal_price" in entities
+
+
+def test_inventory_has_no_duplicates(config: ProjectConfig) -> None:
+    entities = inventory(config)
+
+    assert len(entities) == len(set(entities))
 
 
 def test_every_registered_generator_has_a_distinct_filename() -> None:

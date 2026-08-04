@@ -1,8 +1,14 @@
 from pathlib import Path
 
 from hass_energy.config import ProjectConfig
-from hass_energy.generator import GeneratedFile, generate
-from hass_energy.output import GENERATED_MARKER, check_files, write_files
+from hass_energy.generator import GeneratedFile, generate, inventory
+from hass_energy.output import (
+    GENERATED_MARKER,
+    MANIFEST_NAME,
+    check_files,
+    read_manifest,
+    write_files,
+)
 
 
 def generated(name: str, body: str) -> GeneratedFile:
@@ -81,3 +87,75 @@ def test_check_is_clean_after_a_write(tmp_path: Path, config: ProjectConfig) -> 
     write_files(generate(config), tmp_path)
 
     assert check_files(generate(config), tmp_path).changed is False
+
+
+def test_a_manifest_records_the_generated_entities(tmp_path: Path, config: ProjectConfig) -> None:
+    write_files(generate(config), tmp_path, inventory(config))
+
+    assert read_manifest(tmp_path) == inventory(config)
+    # Not YAML, so Home Assistant's package include ignores it.
+    assert (tmp_path / MANIFEST_NAME).suffix == ".json"
+
+
+def test_the_first_run_reports_no_entity_changes(tmp_path: Path, config: ProjectConfig) -> None:
+    result = write_files(generate(config), tmp_path, inventory(config))
+
+    assert result.entities_added == ()
+    assert result.entities_removed == ()
+
+
+def test_a_rename_is_reported_as_a_drop_and_an_addition(
+    tmp_path: Path, config: ProjectConfig
+) -> None:
+    write_files(generate(config), tmp_path, inventory(config))
+    renamed = config.model_copy(update={"project_name": "villa"})
+
+    result = write_files(generate(renamed), tmp_path, inventory(renamed))
+
+    assert "sensor.hass_energy_marginal_price" in result.entities_removed
+    assert "sensor.villa_marginal_price" in result.entities_added
+
+
+def test_dropping_a_device_reports_its_entities(tmp_path: Path, config: ProjectConfig) -> None:
+    write_files(generate(config), tmp_path, inventory(config))
+    fewer = config.model_copy(update={"devices": config.devices[:1]})
+
+    result = write_files(generate(fewer), tmp_path, inventory(fewer))
+
+    assert "sensor.hass_energy_device_server_daily" in result.entities_removed
+    assert result.entities_added == ()
+
+
+def test_check_reports_entity_changes_without_writing(
+    tmp_path: Path, config: ProjectConfig
+) -> None:
+    write_files(generate(config), tmp_path, inventory(config))
+    renamed = config.model_copy(update={"project_name": "villa"})
+
+    result = check_files(generate(renamed), tmp_path, inventory(renamed))
+
+    assert "sensor.hass_energy_marginal_price" in result.entities_removed
+    assert read_manifest(tmp_path) == inventory(config)
+
+
+def test_an_unreadable_manifest_never_blocks_generation(
+    tmp_path: Path, config: ProjectConfig
+) -> None:
+    write_files(generate(config), tmp_path, inventory(config))
+    (tmp_path / MANIFEST_NAME).write_text("not json", encoding="utf-8")
+
+    result = write_files(generate(config), tmp_path, inventory(config))
+
+    assert result.entities_removed == ()
+    assert read_manifest(tmp_path) == inventory(config)
+
+
+def test_the_manifest_is_not_treated_as_an_obsolete_package(
+    tmp_path: Path, config: ProjectConfig
+) -> None:
+    write_files(generate(config), tmp_path, inventory(config))
+
+    result = write_files(generate(config), tmp_path, inventory(config))
+
+    assert result.removed == ()
+    assert (tmp_path / MANIFEST_NAME).exists()

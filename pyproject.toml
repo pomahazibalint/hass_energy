@@ -9,7 +9,6 @@ description = "Generator-driven Home Assistant energy accounting for annual sett
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-  "jinja2>=3.1",
   "pydantic>=2.0",
   "pyyaml>=6.0",
 ]
@@ -29,11 +28,16 @@ package = true
 
 [tool.ruff]
 line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "N", "SIM", "UP", "RUF"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.mypy]
+files = ["src", "tests"]
 python_version = "3.12"
 warn_unused_configs = true
 warn_redundant_casts = true

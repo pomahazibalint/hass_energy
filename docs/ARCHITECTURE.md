@@ -216,6 +216,19 @@ Testing needs Home Assistant, so those tests live in `tests/integration` and run
 in the workflow job that installs it. The engine's own tests need nothing and
 run everywhere.
 
+## Releasing
+
+Three places carry the version, and HACS reads two of them for different
+purposes: `manifest.json` is what it treats as installed, the release tag is
+what it treats as available. Tag a release without bumping the manifest and
+HACS offers an update forever — it downloads, finds the old version still
+there, and offers it again. `scripts/check_version.py` fails when they part
+company, in the test suite on every run and in the workflow on every tag.
+
+Releasing is therefore: bump `manifest.json` and `pyproject.toml` together,
+commit, tag `vX.Y.Z`, push the tag. The workflow runs on tags as well as on
+main so the check actually fires.
+
 ## Verifying against a running instance
 
 Nothing offline can tell whether `sensor.grid_import_energy` is a real entity or

@@ -16,24 +16,34 @@ Build a generator-driven Home Assistant energy accounting system with Hungarian 
 - The repository should be understandable on its own without relying on chat history.
 
 ## Milestones
-- [ ] Repository structure
-- [ ] Generator framework
-- [ ] Configuration model
-- [ ] Documentation
-- [ ] Example configuration
-- [ ] Utility meters
-- [ ] Pricing
-- [ ] Device costs
-- [ ] House totals
+- [x] Repository structure
+- [x] Generator framework
+- [x] Configuration model
+- [x] Documentation
+- [x] Example configuration
+- [x] Utility meters
+- [x] Pricing
+- [x] Device costs
+- [x] House totals
 - [ ] Diagnostics
 - [ ] Projections
 - [ ] Executive dashboard
 - [ ] Device dashboard
 - [ ] Solar dashboard
 - [ ] Diagnostics dashboard
-- [ ] Tests
-- [ ] GitHub Actions
+- [x] Tests
+- [x] GitHub Actions
 - [ ] Release process
+
+## Current state
+The generator produces five packages from a configuration: utility meters,
+banded pricing, device costs, house totals and the settlement reset automation.
+`hass-energy generate --check` guards determinism in continuous integration,
+and `examples/` holds a configuration with its generated output committed
+beside it.
+
+Nothing is generated for dashboards yet. Diagnostics and projections are the
+natural next step, since both dashboards and alerting depend on them.
 
 ## Ideas backlog
 - Tariff plugins

@@ -1,0 +1,57 @@
+# Example project configuration.
+#
+# Generate the packages beside this file with:
+#   hass-energy generate --config examples/config.yaml --output examples/packages
+
+project_name: hass_energy
+
+billing:
+  country: HU
+  tariff: A1
+  # The settlement period runs from this date to the same date next year.
+  settlement_month: 3
+  settlement_day: 15
+  pricing:
+    # Hungarian A1 residential tariff.
+    subsidized_limit_kwh: 2523
+    subsidized_price: 36.386
+    unsubsidized_price: 70.104
+    currency: Ft
+
+solar:
+  # Exported energy offsets imported energy before the price bands apply.
+  annual_net_metering: true
+
+grid:
+  import_entity: sensor.grid_import_energy
+  export_entity: sensor.grid_export_energy
+  production_entity: sensor.solar_production_energy
+
+meters:
+  cycles: [daily, monthly]
+
+devices:
+  - id: heat_pump
+    entity: sensor.heat_pump_energy
+    name: Heat pump
+    room: Utility room
+    category: heating
+  - id: water_heater
+    entity: sensor.water_heater_energy
+    name: Water heater
+    room: Utility room
+    category: heating
+  - id: ev_charger
+    entity: sensor.ev_charger_energy
+    name: EV charger
+    room: Garage
+    category: transport
+  - id: server
+    entity: sensor.server_energy
+    room: Office
+    category: always_on
+  - id: washing_machine
+    entity: sensor.washing_machine_energy
+    name: Washing machine
+    room: Bathroom
+    category: appliance

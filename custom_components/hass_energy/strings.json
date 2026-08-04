@@ -1,0 +1,112 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Energy settlement",
+        "description": "Choose the meters this metering point is settled on. Prices and contract terms can be edited afterwards.",
+        "data": {
+          "name": "Name",
+          "import_entity": "Grid import meter",
+          "export_entity": "Grid export meter"
+        },
+        "data_description": {
+          "import_entity": "A cumulative kWh sensor, not a power sensor.",
+          "export_entity": "Leave empty if there is no generation."
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Energy settlement",
+        "menu_options": {
+          "terms": "Contract terms",
+          "prices": "Prices",
+          "remove_price": "Remove a price change"
+        }
+      },
+      "terms": {
+        "title": "Contract terms",
+        "data": {
+          "allowance_kwh": "Subsidized allowance (kWh/year)",
+          "allowance_basis": "Allowance is consumed by",
+          "mode": "Settlement mode",
+          "standing_charge_per_month": "Standing charge per month, net",
+          "standing_charge_months": "Standing charge months per settlement",
+          "vat_percent": "VAT (%)",
+          "currency": "Currency"
+        },
+        "data_description": {
+          "allowance_basis": "Whether the allowance is spent by everything withdrawn, or only by what is left after generation is netted off. The two differ sharply for a household that both draws and generates a lot.",
+          "mode": "Szaldó nets generation against consumption. It closes ten years after commissioning, after which settlement is gross."
+        }
+      },
+      "prices": {
+        "title": "Prices",
+        "description": "Set the prices in force from a chosen day. Leave the date at today for a change from now, or set it back to correct something noticed late. Prices already effective on that day are replaced.",
+        "data": {
+          "valid_from": "In force from",
+          "subsidized": "Subsidized price",
+          "market": "Market price",
+          "feed_in": "Feed-in price"
+        },
+        "data_description": {
+          "feed_in": "Paid for generation that netting cannot absorb. Typically a fraction of the price the same kWh costs to buy."
+        }
+      },
+      "remove_price": {
+        "title": "Remove a price change",
+        "description": "Drops a price change added with the wrong date.",
+        "data": {
+          "valid_from": "In force from"
+        }
+      }
+    },
+    "error": {
+      "invalid_date": "That is not a date."
+    }
+  },
+  "selector": {
+    "allowance_basis": {
+      "options": {
+        "netted": "Netted consumption",
+        "gross": "Everything withdrawn"
+      }
+    },
+    "mode": {
+      "options": {
+        "szaldo": "Szaldó (netted)",
+        "brutto": "Bruttó (gross)"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "billed_energy": { "name": "Billed energy" },
+      "surplus_energy": { "name": "Surplus energy" },
+      "subsidized_energy": { "name": "Subsidized energy" },
+      "market_energy": { "name": "Market price energy" },
+      "allowance_remaining": { "name": "Allowance remaining" },
+      "energy_cost": { "name": "Energy cost" },
+      "standing_charge": { "name": "Standing charge" },
+      "vat": { "name": "VAT" },
+      "total_payable": { "name": "Total payable" },
+      "surplus_value": { "name": "Surplus owed" },
+      "net_position": { "name": "Net position" },
+      "period_days": { "name": "Settlement period length" }
+    }
+  },
+  "services": {
+    "close_settlement": {
+      "name": "Close settlement period",
+      "description": "Starts a new settlement period on the day the meter was read. The boundary follows the reading, not the calendar.",
+      "fields": {
+        "reading_date": {
+          "name": "Reading date",
+          "description": "Defaults to today."
+        }
+      }
+    }
+  }
+}

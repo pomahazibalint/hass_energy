@@ -41,9 +41,18 @@ select = ["E", "F", "I", "B", "N", "SIM", "UP", "RUF"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
+# The integration suite needs Home Assistant, which the rest does not. It is
+# run explicitly by the workflow job that has it installed.
+addopts = "--ignore=tests/integration"
 
 [tool.mypy]
 files = ["src", "tests"]
+# The integration needs Home Assistant to type check, so it is checked by the
+# workflow job that has it installed.
+exclude = ["tests/integration"]
+explicit_package_bases = true
+mypy_path = "src"
 python_version = "3.12"
 warn_unused_configs = true
 warn_redundant_casts = true

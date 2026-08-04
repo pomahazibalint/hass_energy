@@ -1,6 +1,26 @@
 # Architecture
 
-This project generates Home Assistant YAML packages for household energy
+The repository holds two deliverables that share a domain.
+
+`src/hass_energy` is the generator, which writes Home Assistant YAML packages,
+plus `src/hass_energy/billing`, a settlement engine that imports nothing from
+Home Assistant and is checked against real invoices.
+
+`custom_components/hass_energy` is a Home Assistant integration that records
+meter quantities and derives the settlement from them. It exists because two
+things the invoices showed cannot be expressed in generated YAML: prices that
+change inside a settlement period, and a period boundary set by a meter reading
+rather than a date. Both need somewhere to keep state.
+
+The engine is shared. The integration declares it in `manifest.json`
+requirements rather than vendoring a copy, which keeps one implementation and
+one set of tests — at the cost that the integration needs the package published
+before it will load from HACS. Until then, install it into Home Assistant
+alongside the component.
+
+## The generator
+
+This half generates Home Assistant YAML packages for household energy
 accounting.
 
 Goals:
@@ -135,6 +155,32 @@ limit at all.
 
 Both are prerequisites for the dashboards: an executive view needs the
 projection, and a diagnostics view needs the problem entities.
+
+## The integration
+
+Only quantities are stored: kWh withdrawn and fed in, bucketed by the price
+period they happened in, alongside the settlement period they belong to. Every
+figure with a currency on it is derived on demand.
+
+That is what makes the contract editable. A corrected price, a switched
+allowance basis or a changed standing charge re-values the same recorded energy
+instead of contradicting it, and a price backdated to before the period started
+simply recomputes. Storing money would have made each of those a migration.
+
+Prices are edited as "these are the prices in force from this day". Leaving the
+date at today is a change; setting it back is a correction noticed late. The
+same form covers both, and submitting a day that already has prices replaces
+them rather than adding a second row.
+
+The settlement period runs to a nominal year until a meter reading ends it,
+because the allowance is annual: prorating it to the days elapsed would report
+a household as over its allowance a week into a period it will finish
+comfortably inside. `close_settlement` takes the reading date and starts the
+next period there.
+
+Testing needs Home Assistant, so those tests live in `tests/integration` and run
+in the workflow job that installs it. The engine's own tests need nothing and
+run everywhere.
 
 ## Verifying against a running instance
 

@@ -76,3 +76,21 @@ jobs:
         run: >
           uv run --python 3.13 --with homeassistant --no-project
           python scripts/render_check.py examples/packages
+
+      # The integration needs Home Assistant to import at all, so its tests and
+      # type check live with the job that has it.
+      - name: Integration tests
+        run: >
+          uv run --python 3.13 --with homeassistant
+          --with pytest-homeassistant-custom-component --no-project
+          python -m pytest tests/integration -q -o asyncio_mode=auto -o addopts=
+        env:
+          PYTHONPATH: src
+
+      - name: Integration types
+        run: >
+          uv run --python 3.13 --with homeassistant --with mypy --no-project
+          python -m mypy --strict --python-version 3.13
+          --explicit-package-bases custom_components
+        env:
+          MYPYPATH: src

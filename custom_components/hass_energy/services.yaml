@@ -1,0 +1,7 @@
+close_settlement:
+  fields:
+    reading_date:
+      required: false
+      example: "2025-09-12"
+      selector:
+        date:

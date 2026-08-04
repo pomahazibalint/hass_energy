@@ -5,3 +5,56 @@ close_settlement:
       example: "2025-09-12"
       selector:
         date:
+
+seed_period:
+  fields:
+    period_start:
+      required: true
+      example: "2025-09-13"
+      selector:
+        date:
+    imported_kwh:
+      required: true
+      example: 1847.2
+      selector:
+        number:
+          min: 0
+          step: 0.001
+          mode: box
+    exported_kwh:
+      required: false
+      example: 2103.5
+      selector:
+        number:
+          min: 0
+          step: 0.001
+          mode: box
+
+import_invoice:
+  fields:
+    period_start:
+      required: true
+      example: "2024-09-09"
+      selector:
+        date:
+    period_end:
+      required: true
+      example: "2025-09-12"
+      selector:
+        date:
+    imported_kwh:
+      required: true
+      example: 7000
+      selector:
+        number:
+          min: 0
+          step: 0.001
+          mode: box
+    exported_kwh:
+      required: false
+      example: 7500
+      selector:
+        number:
+          min: 0
+          step: 0.001
+          mode: box

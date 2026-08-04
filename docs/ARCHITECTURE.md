@@ -178,6 +178,28 @@ a household as over its allowance a week into a period it will finish
 comfortably inside. `close_settlement` takes the reading date and starts the
 next period there.
 
+A settlement period that is already under way when the integration is installed
+is adopted with the `seed_period` action, from the last invoice and the current
+meter. Without it a March installation would account from zero for a period
+that began in September. The seeded energy is spread across the price periods
+it spanned by day, because the shape of energy nobody observed is unknowable;
+everything recorded afterwards is exact.
+
+Past invoices go in through `import_invoice`, which writes them to the recorder
+as external statistics. Home Assistant never saw those years, so nothing else
+can supply them, and without it a fresh install has no history at all.
+
+Problems are repair issues rather than binary sensors: a price schedule that no
+longer reaches the start of the period, a settlement running far past a year
+with no reading recorded, a source that has stopped reporting. The checks run
+on every refresh rather than on a timer, so they cannot describe a state the
+integration has already left. A schedule that cannot price the period makes the
+entities unavailable rather than reporting zero — unvaluable is not the same
+number as nothing.
+
+`unit_price` exists for Home Assistant's own energy dashboard, which wants a
+price rather than a bill.
+
 Testing needs Home Assistant, so those tests live in `tests/integration` and run
 in the workflow job that installs it. The engine's own tests need nothing and
 run everywhere.

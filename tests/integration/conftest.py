@@ -25,13 +25,6 @@ IMPORT_ENTITY = "sensor.grid_import_energy"
 EXPORT_ENTITY = "sensor.grid_export_energy"
 
 
-@pytest.fixture(autouse=True)
-def auto_enable_custom_integrations(
-    enable_custom_integrations: None,
-) -> None:
-    """Let Home Assistant load this repository's custom component."""
-
-
 @pytest.fixture
 def prices() -> list[dict[str, Any]]:
     """A schedule with one change inside the period under test."""
@@ -44,7 +37,9 @@ def prices() -> list[dict[str, Any]]:
 
 @pytest.fixture
 async def entry(
-    hass: HomeAssistant, prices: list[dict[str, Any]]
+    enable_custom_integrations: None,
+    hass: HomeAssistant,
+    prices: list[dict[str, Any]],
 ) -> Generator[MockConfigEntry, None, None]:
     """A configured metering point with both meters present."""
 

@@ -83,18 +83,45 @@
   },
   "entity": {
     "sensor": {
-      "billed_energy": { "name": "Billed energy" },
-      "surplus_energy": { "name": "Surplus energy" },
-      "subsidized_energy": { "name": "Subsidized energy" },
-      "market_energy": { "name": "Market price energy" },
-      "allowance_remaining": { "name": "Allowance remaining" },
-      "energy_cost": { "name": "Energy cost" },
-      "standing_charge": { "name": "Standing charge" },
-      "vat": { "name": "VAT" },
-      "total_payable": { "name": "Total payable" },
-      "surplus_value": { "name": "Surplus owed" },
-      "net_position": { "name": "Net position" },
-      "period_days": { "name": "Settlement period length" }
+      "billed_energy": {
+        "name": "Billed energy"
+      },
+      "surplus_energy": {
+        "name": "Surplus energy"
+      },
+      "subsidized_energy": {
+        "name": "Subsidized energy"
+      },
+      "market_energy": {
+        "name": "Market price energy"
+      },
+      "allowance_remaining": {
+        "name": "Allowance remaining"
+      },
+      "energy_cost": {
+        "name": "Energy cost"
+      },
+      "standing_charge": {
+        "name": "Standing charge"
+      },
+      "vat": {
+        "name": "VAT"
+      },
+      "total_payable": {
+        "name": "Total payable"
+      },
+      "surplus_value": {
+        "name": "Surplus owed"
+      },
+      "net_position": {
+        "name": "Net position"
+      },
+      "period_days": {
+        "name": "Settlement period length"
+      },
+      "unit_price": {
+        "name": "Current unit price"
+      }
     }
   },
   "services": {
@@ -107,6 +134,60 @@
           "description": "Defaults to today."
         }
       }
+    },
+    "seed_period": {
+      "name": "Seed the settlement period",
+      "description": "Adopts a settlement period already under way, so an integration installed mid-period does not account from zero. Take the figures from your last invoice and current meter.",
+      "fields": {
+        "period_start": {
+          "name": "Period start",
+          "description": "The date of the last meter reading."
+        },
+        "imported_kwh": {
+          "name": "Imported so far",
+          "description": "kWh withdrawn since that reading."
+        },
+        "exported_kwh": {
+          "name": "Exported so far",
+          "description": "kWh fed in since that reading."
+        }
+      }
+    },
+    "import_invoice": {
+      "name": "Import a settled invoice",
+      "description": "Records a past settlement as long-term statistics, so previous years appear in history instead of the story starting today.",
+      "fields": {
+        "period_start": {
+          "name": "Period start",
+          "description": "First day the invoice covers."
+        },
+        "period_end": {
+          "name": "Period end",
+          "description": "Last day the invoice covers."
+        },
+        "imported_kwh": {
+          "name": "Imported",
+          "description": "kWh withdrawn over the period."
+        },
+        "exported_kwh": {
+          "name": "Exported",
+          "description": "kWh fed in over the period."
+        }
+      }
+    }
+  },
+  "issues": {
+    "price_coverage": {
+      "title": "No prices for the start of the settlement period",
+      "description": "The price schedule does not reach back to {period_start}, when the current settlement period began, so the energy already recorded cannot be valued. Add a price change effective on or before that date."
+    },
+    "settlement_overdue": {
+      "title": "Settlement period has run {days} days",
+      "description": "A settlement period this long suggests the meter has been read without the integration being told. Call the Close settlement period action with the reading date to start the next one."
+    },
+    "source_missing": {
+      "title": "Energy source sensors are not reporting",
+      "description": "{entities} are unavailable or not numeric. Nothing is being recorded from them, and the settlement will understate what the house used."
     }
   }
 }

@@ -17,11 +17,12 @@ from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.storage import Store
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from hass_energy.billing import Bill, MeterReadings, SettlementPeriod, calculate
 
+from . import issues
 from .const import (
     CONF_EXPORT_ENTITY,
     CONF_IMPORT_ENTITY,
@@ -126,7 +127,7 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             async_track_state_change_event(self.hass, sources, self._handle_source)
         )
         self._seed_from_current_states()
-        self.async_set_updated_data(self.build_bill())
+        self.refresh_settlement()
 
     def _seed_from_current_states(self) -> None:
         """Take the first reading without counting it as consumption.
@@ -168,7 +169,7 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             self._bucket().exported += delta
 
         self._store.async_delay_save(self.state.as_dict, SAVE_DELAY)
-        self.async_set_updated_data(self.build_bill())
+        self.refresh_settlement()
 
     @staticmethod
     def _delta(previous: float | None, reading: float) -> float:
@@ -206,6 +207,87 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         """
 
         return self.state.start + timedelta(days=NOMINAL_PERIOD_DAYS)
+
+    def refresh_settlement(self) -> None:
+        """Re-derive the settlement and re-check what could be wrong with it.
+
+        The checks run here rather than on a timer so they cannot describe a
+        state the integration has already moved on from.
+        """
+
+        covered = self.prices_cover_period()
+        issues.price_coverage(self.hass, self.entry.entry_id, covered, self.state.start)
+        issues.settlement_overdue(self.hass, self.entry.entry_id, self.days_elapsed())
+        issues.source_missing(self.hass, self.entry.entry_id, self.missing_sources())
+
+        if not covered:
+            # Every derived figure is unanswerable, which is not the same as
+            # zero, so the entities go unavailable rather than report a guess.
+            self.async_set_update_error(
+                UpdateFailed(
+                    f"No prices are known for {self.state.start}, "
+                    "when the settlement period began."
+                )
+            )
+            return
+
+        self.async_set_updated_data(self.build_bill())
+
+    def missing_sources(self) -> list[str]:
+        """Configured meters that are not currently reporting a number."""
+
+        sources = [self.import_entity]
+        if self.export_entity:
+            sources.append(self.export_entity)
+        return [entity for entity in sources if self._read(entity) is None]
+
+    def prices_cover_period(self) -> bool:
+        """Whether the schedule reaches back to the start of the period."""
+
+        schedule = schedule_from_options(self.entry.options)
+        return schedule.entries[0].valid_from <= self.state.start
+
+    def current_unit_price(self, today: date | None = None) -> float:
+        """What the next kWh costs, at the band in force.
+
+        The figure to point Home Assistant's energy dashboard at, since that
+        wants a price rather than a bill.
+        """
+
+        day = today or dt_util.now().date()
+        schedule = schedule_from_options(self.entry.options)
+        prices = schedule.at(max(day, schedule.entries[0].valid_from))
+        bill = self.data
+        if bill is not None and bill.billed_kwh >= bill.allowance_kwh:
+            return prices.market
+        return prices.subsidized
+
+    def seed(
+        self, period_start: date, imported: float, exported: float, today: date | None = None
+    ) -> None:
+        """Adopt a settlement period already under way.
+
+        Installed in March, the integration would otherwise account from zero
+        for a period that began in September. The quantities are spread across
+        the price periods elapsed by day, because the shape of energy nobody
+        observed is unknowable; everything recorded from here on is exact.
+        """
+
+        day = today or dt_util.now().date()
+        self.state = PeriodState(
+            start=period_start,
+            last_import=self.state.last_import,
+            last_export=self.state.last_export,
+        )
+        schedule = schedule_from_options(self.entry.options)
+        end = max(day, period_start + timedelta(days=1))
+        segments = schedule.segments(max(period_start, schedule.entries[0].valid_from), end)
+        days = sum(segment.days for segment in segments) or 1
+        for segment in segments:
+            share = segment.days / days
+            self.state.buckets[segment.prices.valid_from.isoformat()] = Bucket(
+                imported=imported * share, exported=exported * share
+            )
 
     def build_bill(self, today: date | None = None) -> Bill:
         """Derive the settlement from what has been recorded so far."""
@@ -258,7 +340,7 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             last_export=self.state.last_export,
         )
         await self._store.async_save(self.state.as_dict())
-        self.async_set_updated_data(self.build_bill())
+        self.refresh_settlement()
 
 
 def _split_like(total: float, shape: list[float]) -> list[float]:

@@ -1,0 +1,95 @@
+"""Problems worth interrupting someone about.
+
+Home Assistant has a place for these, so they are raised as repair issues
+rather than as binary sensors nobody has put on a dashboard yet.
+"""
+
+from __future__ import annotations
+
+from datetime import date, timedelta
+
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
+
+from .const import DOMAIN
+
+#: A settlement running this far past a nominal year suggests the meter reading
+#: happened and nobody told the integration. The reference invoices ran 359 and
+#: 368 days, and the supplier announces the reading as a two-week window.
+OVERDUE_AFTER_DAYS = 400
+
+
+def _issue_id(entry_id: str, kind: str) -> str:
+    return f"{kind}_{entry_id}"
+
+
+def _set(
+    hass: HomeAssistant,
+    entry_id: str,
+    kind: str,
+    active: bool,
+    severity: ir.IssueSeverity = ir.IssueSeverity.WARNING,
+    placeholders: dict[str, str] | None = None,
+) -> None:
+    issue_id = _issue_id(entry_id, kind)
+    if not active:
+        ir.async_delete_issue(hass, DOMAIN, issue_id)
+        return
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        issue_id,
+        is_fixable=False,
+        severity=severity,
+        translation_key=kind,
+        translation_placeholders=placeholders or {},
+    )
+
+
+def price_coverage(hass: HomeAssistant, entry_id: str, covered: bool, start: date) -> None:
+    """The schedule has to reach back to the start of the settlement period.
+
+    Without it there is no price for the energy already recorded, and every
+    derived figure is unanswerable rather than merely wrong.
+    """
+
+    _set(
+        hass,
+        entry_id,
+        "price_coverage",
+        active=not covered,
+        severity=ir.IssueSeverity.ERROR,
+        placeholders={"period_start": start.isoformat()},
+    )
+
+
+def settlement_overdue(hass: HomeAssistant, entry_id: str, days: int) -> None:
+    """A period that has run far past a year has probably already been read."""
+
+    _set(
+        hass,
+        entry_id,
+        "settlement_overdue",
+        active=days > OVERDUE_AFTER_DAYS,
+        placeholders={"days": str(days)},
+    )
+
+
+def source_missing(hass: HomeAssistant, entry_id: str, missing: list[str]) -> None:
+    """A source that is not reporting stops the accounting silently."""
+
+    _set(
+        hass,
+        entry_id,
+        "source_missing",
+        active=bool(missing),
+        placeholders={"entities": ", ".join(missing)},
+    )
+
+
+def stale_since(last_seen: date | None, today: date, days: int) -> bool:
+    """Whether a source has gone quiet for longer than it should."""
+
+    if last_seen is None:
+        return False
+    return today - last_seen > timedelta(days=days)

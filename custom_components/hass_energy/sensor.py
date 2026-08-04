@@ -37,6 +37,8 @@ class SettlementSensorDescription(SensorEntityDescription):
     value: Callable[[SettlementCoordinator], float | int]
     #: Currency lines take their unit from the contract rather than a constant.
     monetary: bool = False
+    #: A price rather than an amount, so the unit carries the kWh.
+    per_kwh: bool = False
 
 
 SENSORS: tuple[SettlementSensorDescription, ...] = (
@@ -130,6 +132,15 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value=lambda c: c.days_elapsed(),
     ),
+    # Home Assistant's own energy dashboard wants a price, not a bill. Point
+    # its "use an entity tracking the price" option at this.
+    SettlementSensorDescription(
+        key="unit_price",
+        translation_key="unit_price",
+        state_class=SensorStateClass.MEASUREMENT,
+        per_kwh=True,
+        value=lambda c: c.current_unit_price(),
+    ),
 )
 
 
@@ -157,8 +168,11 @@ class SettlementSensor(CoordinatorEntity[SettlementCoordinator], SensorEntity):
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
+        currency = terms_from_options(entry.options).currency
         if description.monetary:
-            self._attr_native_unit_of_measurement = terms_from_options(entry.options).currency
+            self._attr_native_unit_of_measurement = currency
+        elif description.per_kwh:
+            self._attr_native_unit_of_measurement = f"{currency}/{KWH}"
 
     @property
     def native_value(self) -> float | int:

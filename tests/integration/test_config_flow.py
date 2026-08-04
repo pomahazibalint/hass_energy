@@ -21,7 +21,9 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from .conftest import EXPORT_ENTITY, IMPORT_ENTITY
 
 
-async def test_setup_only_asks_for_the_meters(hass: HomeAssistant) -> None:
+async def test_setup_only_asks_for_the_meters(
+    enable_custom_integrations: None, hass: HomeAssistant
+) -> None:
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_USER}
     )
@@ -49,7 +51,9 @@ async def test_setup_only_asks_for_the_meters(hass: HomeAssistant) -> None:
     assert len(created["options"][CONF_PRICES]) == 1
 
 
-async def test_export_is_optional(hass: HomeAssistant) -> None:
+async def test_export_is_optional(
+    enable_custom_integrations: None, hass: HomeAssistant
+) -> None:
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_USER}
     )
@@ -152,7 +156,9 @@ async def test_a_price_change_can_be_removed(
     assert [row[CONF_VALID_FROM] for row in result["data"][CONF_PRICES]] == ["2024-01-01"]
 
 
-async def test_removal_is_hidden_with_a_single_price(hass: HomeAssistant) -> None:
+async def test_removal_is_hidden_with_a_single_price(
+    enable_custom_integrations: None, hass: HomeAssistant
+) -> None:
     """A schedule with nothing in it cannot value anything."""
 
     config_entry = MockConfigEntry(

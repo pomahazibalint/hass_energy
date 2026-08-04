@@ -29,7 +29,14 @@ CONF_MARKET: Final = "market"
 CONF_FEED_IN: Final = "feed_in"
 
 SERVICE_CLOSE_SETTLEMENT: Final = "close_settlement"
+SERVICE_SEED_PERIOD: Final = "seed_period"
+SERVICE_IMPORT_INVOICE: Final = "import_invoice"
+
 ATTR_READING_DATE: Final = "reading_date"
+ATTR_PERIOD_START: Final = "period_start"
+ATTR_PERIOD_END: Final = "period_end"
+ATTR_IMPORTED_KWH: Final = "imported_kwh"
+ATTR_EXPORTED_KWH: Final = "exported_kwh"
 
 STORAGE_VERSION: Final = 1
 STORAGE_KEY: Final = DOMAIN

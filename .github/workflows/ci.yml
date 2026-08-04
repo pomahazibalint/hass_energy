@@ -55,6 +55,30 @@ jobs:
         if: github.ref_type == 'tag'
         run: uv run python scripts/check_version.py --tag "${{ github.ref_name }}"
 
+  # A tag is invisible to HACS; a GitHub release is what it offers as an
+  # update. So the release is created here, only once everything that could
+  # reject this tag has passed. A tag pushed with a broken build leaves no
+  # release behind and nobody is offered anything.
+  release:
+    needs: [check, hassfest, home-assistant]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "$TAG is already released"
+          else
+            gh release create "$TAG" --title "$TAG" --generate-notes
+          fi
+
   # Validates the manifest the way Home Assistant will, which is not something
   # the integration's own tests can do: they import it, they do not vet it.
   hassfest:

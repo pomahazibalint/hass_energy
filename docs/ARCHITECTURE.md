@@ -225,9 +225,15 @@ HACS offers an update forever — it downloads, finds the old version still
 there, and offers it again. `scripts/check_version.py` fails when they part
 company, in the test suite on every run and in the workflow on every tag.
 
+The check alone would only find that out afterwards, though, because HACS reads
+GitHub releases and continuous integration runs after a tag is pushed. So the
+release is not made by hand: the workflow creates it, and only once every job
+has passed. A tag on its own is invisible to HACS, so a tag pushed with a
+failing build offers nobody anything and can simply be deleted.
+
 Releasing is therefore: bump `manifest.json` and `pyproject.toml` together,
-commit, tag `vX.Y.Z`, push the tag. The workflow runs on tags as well as on
-main so the check actually fires.
+commit, tag `vX.Y.Z`, push the tag, and let the workflow publish it. Creating a
+release through the GitHub interface bypasses all of this, so don't.
 
 ## Verifying against a running instance
 

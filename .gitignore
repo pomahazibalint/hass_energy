@@ -8,3 +8,9 @@ dist/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# A real configuration names the entity ids of a real house, and the README
+# tells you to put it here. Only the example belongs in the repository.
+/config.yaml
+/config.yml
+/packages/

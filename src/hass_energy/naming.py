@@ -71,7 +71,13 @@ def total(prefix: str, name: str, cycle: str) -> str:
     return f"{prefix}_{name}_{cycle}"
 
 
-def pricing(prefix: str, name: str) -> str:
-    """Object id of a settlement-wide pricing sensor."""
+def prefixed(prefix: str, name: str) -> str:
+    """Object id of a project-wide entity that is not per device or per cycle."""
 
     return f"{prefix}_{name}"
+
+
+def binary_sensor(object_id: str) -> str:
+    """Entity id of a binary sensor with the given object id."""
+
+    return f"binary_sensor.{object_id}"

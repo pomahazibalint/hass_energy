@@ -67,6 +67,34 @@ def sum_of(
     )
 
 
+def _entity(
+    domain: str,
+    name: str,
+    unique_id: str,
+    state: str,
+    available_from: tuple[str, ...],
+    attributes: dict[str, str] | None,
+    describes: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    # Home Assistant derives a template entity's id by slugifying its name, so
+    # a readable name would produce an id no other generated template could
+    # predict. default_entity_id pins the id to the unique id instead, which is
+    # what entities.py hands out, and leaves the name free to stay readable.
+    entry: dict[str, Any] = {
+        "name": name,
+        "unique_id": unique_id,
+        "default_entity_id": f"{domain}.{unique_id}",
+    }
+    # Keys describing what the state means read better ahead of the state.
+    entry.update(describes or {})
+    entry["state"] = state
+    if available_from:
+        entry["availability"] = availability(*available_from)
+    if attributes:
+        entry["attributes"] = attributes
+    return entry
+
+
 def sensor(
     *,
     name: str,
@@ -80,30 +108,42 @@ def sensor(
 ) -> dict[str, Any]:
     """One entry of a Home Assistant template sensor package."""
 
-    # Home Assistant derives a template entity's id by slugifying its name, so
-    # a readable name would produce an id no other generated template could
-    # predict. default_entity_id pins the id to the unique id instead, which is
-    # what entities.py hands out, and leaves the name free to stay readable.
-    entry: dict[str, Any] = {
-        "name": name,
-        "unique_id": unique_id,
-        "default_entity_id": f"sensor.{unique_id}",
-    }
+    describes: dict[str, Any] = {}
     if device_class is not None:
-        entry["device_class"] = device_class
+        describes["device_class"] = device_class
     if state_class is not None:
-        entry["state_class"] = state_class
+        describes["state_class"] = state_class
     if unit is not None:
-        entry["unit_of_measurement"] = unit
-    entry["state"] = state
-    if available_from:
-        entry["availability"] = availability(*available_from)
-    if attributes:
-        entry["attributes"] = attributes
-    return entry
+        describes["unit_of_measurement"] = unit
+    return _entity("sensor", name, unique_id, state, available_from, attributes, describes)
 
 
-def package(sensors: list[dict[str, Any]]) -> dict[str, Any]:
-    """Wrap template sensors in the package structure Home Assistant expects."""
+def binary_sensor(
+    *,
+    name: str,
+    unique_id: str,
+    state: str,
+    device_class: str | None = None,
+    available_from: tuple[str, ...] = (),
+    attributes: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """One entry of a Home Assistant template binary sensor package."""
 
-    return {"template": [{"sensor": sensors}]}
+    describes = {"device_class": device_class} if device_class is not None else {}
+    return _entity(
+        "binary_sensor", name, unique_id, state, available_from, attributes, describes
+    )
+
+
+def package(
+    sensors: list[dict[str, Any]] | None = None,
+    binary_sensors: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Wrap template entities in the package structure Home Assistant expects."""
+
+    block: dict[str, Any] = {}
+    if sensors:
+        block["sensor"] = sensors
+    if binary_sensors:
+        block["binary_sensor"] = binary_sensors
+    return {"template": [block]}

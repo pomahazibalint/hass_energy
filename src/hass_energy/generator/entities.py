@@ -67,10 +67,18 @@ class Entities:
         return naming.sensor(self.total_id(name, cycle))
 
     def pricing_id(self, name: str) -> str:
-        return naming.pricing(self.prefix, name)
+        return naming.prefixed(self.prefix, name)
 
     def pricing(self, name: str) -> str:
         return naming.sensor(self.pricing_id(name))
+
+    def problem_id(self, name: str) -> str:
+        return naming.prefixed(self.prefix, name)
+
+    def problem(self, name: str) -> str:
+        """Entity id of a diagnostic binary sensor."""
+
+        return naming.binary_sensor(self.problem_id(name))
 
     def device_energy(self, device: DeviceConfig, cycle: str) -> tuple[str, ...]:
         """Meters holding a device's energy for one cycle.

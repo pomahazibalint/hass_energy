@@ -129,6 +129,19 @@ class MeterConfig(BaseModel):
         return self
 
 
+class DiagnosticsConfig(BaseModel):
+    """Thresholds for the generated health checks."""
+
+    model_config = ConfigDict(frozen=True)
+
+    #: How long a source sensor may go without an update before it counts as
+    #: stopped. Energy meters report far more often than this.
+    stale_after_hours: float = Field(default=6, gt=0)
+    #: Share of consumption no device accounts for, above which the attribution
+    #: is worth attention rather than being normal background load.
+    unmonitored_warning_percent: float = Field(default=40, ge=0, le=100)
+
+
 class DeviceConfig(BaseModel):
     """A single monitored device backed by an energy sensor."""
 
@@ -166,6 +179,7 @@ class ProjectConfig(BaseModel):
     solar: SolarConfig = Field(default_factory=SolarConfig)
     grid: GridConfig = Field(default_factory=GridConfig)
     meters: MeterConfig = Field(default_factory=MeterConfig)
+    diagnostics: DiagnosticsConfig = Field(default_factory=DiagnosticsConfig)
     devices: tuple[DeviceConfig, ...] = ()
 
     @model_validator(mode="after")

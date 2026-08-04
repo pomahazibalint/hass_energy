@@ -11,8 +11,10 @@ from .. import naming
 from ..config import ProjectConfig
 from .base import GeneratedFile, GenerationError, Generator
 from .device_costs import DeviceCostGenerator
+from .diagnostics import DiagnosticsGenerator
 from .house_totals import HouseTotalsGenerator
 from .pricing import PricingGenerator
+from .projections import ProjectionsGenerator
 from .settlement import SettlementGenerator
 from .utility_meters import UtilityMeterGenerator
 
@@ -24,6 +26,8 @@ GENERATORS: tuple[Generator, ...] = (
     DeviceCostGenerator(),
     HouseTotalsGenerator(),
     SettlementGenerator(),
+    DiagnosticsGenerator(),
+    ProjectionsGenerator(),
 )
 
 __all__ = [
@@ -66,5 +70,6 @@ def inventory(config: ProjectConfig) -> tuple[str, ...]:
             else:
                 entities.append(naming.sensor(object_id))
         for block in data.get("template", []):
-            entities += [sensor["default_entity_id"] for sensor in block["sensor"]]
+            for domain in ("sensor", "binary_sensor"):
+                entities += [entry["default_entity_id"] for entry in block.get(domain, [])]
     return tuple(entities)

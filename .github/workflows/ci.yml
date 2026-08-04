@@ -8,12 +8,17 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          python-version: ${{ matrix.python-version }}
 
       - run: uv sync --extra dev
 
@@ -34,3 +39,33 @@ jobs:
           --config examples/config.yaml
           --output examples/packages
           --check
+
+  home-assistant:
+    # Validates the generated YAML against Home Assistant's own schemas rather
+    # than against this project's model of them. Home Assistant needs 3.13.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Assemble a Home Assistant configuration
+        run: |
+          mkdir -p ha-config/packages
+          cp examples/packages/*.yaml ha-config/packages/
+          printf 'homeassistant:\n  packages: !include_dir_named packages\n' \
+            > ha-config/configuration.yaml
+
+      # check_config exits 0 even when it rejects the configuration, so its
+      # output is what decides the result.
+      - name: Home Assistant configuration check
+        run: |
+          set -o pipefail
+          uvx --python 3.13 --from homeassistant \
+            hass --script check_config -c ha-config | tee check.log
+          if grep -q 'Incorrect config' check.log; then
+            echo '::error::Home Assistant rejected the generated packages'
+            exit 1
+          fi

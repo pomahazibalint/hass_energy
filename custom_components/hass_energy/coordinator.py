@@ -20,9 +20,8 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from hass_energy.billing import Bill, MeterReadings, SettlementPeriod, calculate
-
 from . import issues
+from .billing import Bill, MeterReadings, SettlementPeriod, calculate
 from .const import (
     CONF_EXPORT_ENTITY,
     CONF_IMPORT_ENTITY,

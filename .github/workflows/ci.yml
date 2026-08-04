@@ -40,6 +40,11 @@ jobs:
           --output examples/packages
           --check
 
+      # The integration ships its own copy of the settlement engine so it needs
+      # nothing installed at runtime. That copy is an artifact like the packages.
+      - name: Vendored engine is up to date
+        run: uv run python scripts/vendor_billing.py --check
+
   home-assistant:
     # Validates the generated YAML against Home Assistant's own schemas rather
     # than against this project's model of them. Home Assistant needs 3.13.
@@ -84,13 +89,9 @@ jobs:
           uv run --python 3.13 --with homeassistant
           --with pytest-homeassistant-custom-component --no-project
           python -m pytest tests/integration -q -o asyncio_mode=auto -o addopts=
-        env:
-          PYTHONPATH: src
 
       - name: Integration types
         run: >
           uv run --python 3.13 --with homeassistant --with mypy --no-project
           python -m mypy --strict --python-version 3.13
           --explicit-package-bases custom_components
-        env:
-          MYPYPATH: src

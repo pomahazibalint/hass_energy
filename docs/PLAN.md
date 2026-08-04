@@ -48,6 +48,12 @@ the generated YAML against Home Assistant's own schemas with
 Home Assistant instance. `examples/` holds a configuration with its generated
 output committed beside it.
 
+A Home Assistant integration records meter quantities and derives the
+settlement from them, for the two things generated YAML cannot express: prices
+that change inside a settlement period, and a period boundary set by a meter
+reading rather than a date. It ships its own copy of the settlement engine, so
+it installs by copying one directory and needs nothing at runtime.
+
 Dashboards are the remaining feature work, and the entities they need now
 exist: the executive view reads the projections, the diagnostics view reads the
 problem entities.

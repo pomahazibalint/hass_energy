@@ -1,11 +1,21 @@
+from typing import TYPE_CHECKING
+
 import pytest
 
-from hass_energy.config import DeviceConfig, GridConfig, ProjectConfig
+if TYPE_CHECKING:
+    from hass_energy.config import ProjectConfig
 
 
 @pytest.fixture
-def config() -> ProjectConfig:
-    """A configuration exercising grid, solar and devices."""
+def config() -> "ProjectConfig":
+    """A configuration exercising grid, solar and devices.
+
+    The generator is imported inside the fixture because this file is also a
+    parent conftest for the integration tests, which run without the generator
+    or its dependencies installed.
+    """
+
+    from hass_energy.config import DeviceConfig, GridConfig, ProjectConfig
 
     return ProjectConfig(
         grid=GridConfig(

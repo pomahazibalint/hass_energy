@@ -9,8 +9,6 @@
   "integration_type": "service",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/pomahazibalint/hass_energy/issues",
-  "requirements": [
-    "hass-energy-accounting>=0.1.0"
-  ],
+  "requirements": [],
   "version": "0.1.0"
 }

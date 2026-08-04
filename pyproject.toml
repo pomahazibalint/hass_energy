@@ -52,7 +52,7 @@ files = ["src", "tests"]
 # workflow job that has it installed.
 exclude = ["tests/integration"]
 explicit_package_bases = true
-mypy_path = "src"
+mypy_path = "src:scripts"
 python_version = "3.12"
 warn_unused_configs = true
 warn_redundant_casts = true

@@ -12,11 +12,23 @@ things the invoices showed cannot be expressed in generated YAML: prices that
 change inside a settlement period, and a period boundary set by a meter reading
 rather than a date. Both need somewhere to keep state.
 
-The engine is shared. The integration declares it in `manifest.json`
-requirements rather than vendoring a copy, which keeps one implementation and
-one set of tests — at the cost that the integration needs the package published
-before it will load from HACS. Until then, install it into Home Assistant
-alongside the component.
+The engine has one consumer, the integration, and the integration has to be
+self-contained: Home Assistant installs a custom component by copying a single
+directory, and anything declared in `manifest.json` requirements is
+pip-installed when the entry sets up — a network round-trip at startup and a
+way for the integration to fail to load entirely.
+
+So the engine is vendored into `custom_components/hass_energy/billing`, and
+that copy is an artifact in exactly the sense the generated packages are:
+source of truth in `src`, copy committed so it ships, and a check that the two
+have not drifted. `scripts/vendor_billing.py` writes it, `--check` fails when
+it is stale, and both the test suite and the workflow run that check. Each
+copied file says it is one.
+
+Keeping the source in `src` is what lets the engine be tested in about a
+second, against two dependencies, on every supported Python. Moving it into the
+component would have made its tests require a Home Assistant install — a poor
+trade for the code that most needs a fast feedback loop.
 
 ## The generator
 

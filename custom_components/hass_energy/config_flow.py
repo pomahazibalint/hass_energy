@@ -11,8 +11,7 @@ from homeassistant.const import CONF_NAME
 from homeassistant.helpers import selector
 from homeassistant.util import dt as dt_util
 
-from hass_energy.billing import AllowanceBasis, SettlementMode
-
+from .billing import AllowanceBasis, SettlementMode
 from .const import (
     CONF_ALLOWANCE_BASIS,
     CONF_ALLOWANCE_KWH,

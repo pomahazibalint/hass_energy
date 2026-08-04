@@ -21,8 +21,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.util import dt as dt_util
 from homeassistant.util import slugify
 
-from hass_energy.billing import MeterReadings, SettlementPeriod, calculate
-
+from .billing import MeterReadings, SettlementPeriod, calculate
 from .const import (
     ATTR_EXPORTED_KWH,
     ATTR_IMPORTED_KWH,

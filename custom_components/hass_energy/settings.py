@@ -11,8 +11,7 @@ from collections.abc import Mapping
 from datetime import date
 from typing import Any
 
-from hass_energy.billing import AllowanceBasis, Prices, PriceSchedule, SettlementMode, TariffTerms
-
+from .billing import AllowanceBasis, Prices, PriceSchedule, SettlementMode, TariffTerms
 from .const import (
     CONF_ALLOWANCE_BASIS,
     CONF_ALLOWANCE_KWH,

@@ -2,7 +2,7 @@ from typing import Any
 
 import yaml
 
-from hass_energy.config import DiagnosticsConfig, GridConfig, ProjectConfig
+from hass_energy.config import DiagnosticsConfig, GridConfig, MeterConfig, ProjectConfig
 from hass_energy.generator import generate
 
 
@@ -58,6 +58,14 @@ def test_no_device_checks_without_devices() -> None:
     assert "hass_energy_attribution_poor" not in ids
     # Source availability still matters without devices.
     assert "hass_energy_sources_unavailable" in ids
+
+
+def test_a_project_with_only_a_settlement_cycle_is_generated(config: ProjectConfig) -> None:
+    config = config.model_copy(update={"meters": MeterConfig(cycles=())})
+
+    check = entity(config, "hass_energy_attribution_poor")
+
+    assert "sensor.hass_energy_unmonitored_share_settlement" in check["state"]
 
 
 def test_unmonitored_share_is_generated_per_cycle(config: ProjectConfig) -> None:

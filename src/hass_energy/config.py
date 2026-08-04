@@ -200,6 +200,16 @@ class ProjectConfig(BaseModel):
 
         return (*self.meters.cycles, SETTLEMENT_CYCLE)
 
+    @property
+    def primary_cycle(self) -> str:
+        """The shortest configured cycle, for checks that need just one.
+
+        A project may configure no shorter cycles at all, in which case the
+        settlement period is the only one there is.
+        """
+
+        return self.meters.cycles[0] if self.meters.cycles else SETTLEMENT_CYCLE
+
     def cycles_for(self, device: DeviceConfig) -> tuple[str, ...]:
         """Cycles generated for one device, settlement included."""
 

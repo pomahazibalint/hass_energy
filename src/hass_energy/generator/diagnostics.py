@@ -141,7 +141,7 @@ class DiagnosticsGenerator(Generator):
             )
 
         if config.devices:
-            share = entities.total(UNMONITORED_SHARE, config.meters.cycles[0])
+            share = entities.total(UNMONITORED_SHARE, config.primary_cycle)
             threshold = t.number(config.diagnostics.unmonitored_warning_percent)
             binary_sensors.append(
                 t.binary_sensor(

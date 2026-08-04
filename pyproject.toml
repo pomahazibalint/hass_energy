@@ -1,5 +1,5 @@
 [build-system]
-requires = ["uv_build>=0.11.26,<0.12"]
+requires = ["uv_build>=0.11.26,<0.13"]
 build-backend = "uv_build"
 
 [project]
@@ -25,6 +25,11 @@ hass-energy = "hass_energy.cli:main"
 
 [tool.uv]
 package = true
+
+[tool.uv.build-backend]
+# The distribution is named for what it does; the module is named for what you
+# import. Without this the backend looks for src/hass_energy_accounting.
+module-name = "hass_energy"
 
 [tool.ruff]
 line-length = 100

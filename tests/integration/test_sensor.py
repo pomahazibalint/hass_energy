@@ -45,10 +45,10 @@ async def test_a_silent_meter_still_owes_the_standing_charge(
     assert hass.states.get(PREFIX + "total_payable").state == "1836"  # type: ignore[union-attr]
 
 
-async def test_the_2025_invoice_through_the_integration(
+async def test_a_whole_settlement_through_the_integration(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
-    """Invoice settlement end to end: quantities in, settlement out.
+    """A whole settlement end to end: quantities in, itemised bill out.
 
     The engine is checked against this invoice directly elsewhere. This checks
     that the integration feeds it the right things and publishes the result.
@@ -66,8 +66,8 @@ async def test_the_2025_invoice_through_the_integration(
             ],
         },
     )
-    # 7 000 kWh withdrawn, 7 500 fed in, recorded against each price period as
-    # the invoice splits them.
+    # 7 000 kWh withdrawn, 7 500 fed in, recorded against the price period
+    # each happened in.
     coordinator.state = PeriodState(
         start=date(2024, 9, 9),
         buckets={

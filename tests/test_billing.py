@@ -79,7 +79,7 @@ def test_the_gross_basis_leaves_nothing_for_netted_consumption() -> None:
 
     terms = TariffTerms(allowance_basis=AllowanceBasis.GROSS)
 
-    bill = settle(imported=7000, exported=5500, terms=terms)
+    bill = settle(imported=6000, exported=5500, terms=terms)
 
     assert bill.billed_kwh == 500
     assert bill.subsidized_kwh == 0
@@ -88,7 +88,7 @@ def test_the_gross_basis_leaves_nothing_for_netted_consumption() -> None:
 
 
 def test_the_netted_basis_subsidizes_the_same_consumption() -> None:
-    bill = settle(imported=7000, exported=5500)
+    bill = settle(imported=6000, exported=5500)
 
     assert bill.billed_kwh == 500
     assert bill.subsidized_kwh == 500

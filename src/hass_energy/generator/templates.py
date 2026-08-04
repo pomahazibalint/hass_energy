@@ -51,7 +51,9 @@ def availability(*entities: str) -> str:
     return expression(" and ".join(f"has_value('{entity}')" for entity in entities))
 
 
-def sum_of(entities: tuple[str, ...] | list[str], name: str = "sources") -> str:
+def sum_of(
+    entities: tuple[str, ...] | list[str], name: str = "sources", precision: int = 3
+) -> str:
     """Template summing a fixed list of numeric entities."""
 
     if not entities:
@@ -61,7 +63,7 @@ def sum_of(entities: tuple[str, ...] | list[str], name: str = "sources") -> str:
         "{% set " + name + " = [",
         f"  {listing},",
         "] %}",
-        expression(f"{name} | map('states') | map('float', 0) | sum | round(3)"),
+        expression(f"{name} | map('states') | map('float', 0) | sum | round({precision})"),
     )
 
 

@@ -104,7 +104,7 @@ class HouseTotalsGenerator(Generator):
                 t.sensor(
                     name=f"Monitored cost {label}",
                     unique_id=entities.total_id(MONITORED_COST, cycle),
-                    state=t.sum_of(entities.device_costs(cycle), name="costs"),
+                    state=t.sum_of(entities.device_costs(cycle), name="costs", precision=2),
                     unit=currency,
                     state_class=t.COST_STATE_CLASS,
                 )

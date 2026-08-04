@@ -56,7 +56,7 @@ template:
         'sensor.hass_energy_cost_server_daily',
         'sensor.hass_energy_cost_washing_machine_daily',
       ] %}
-      {{ costs | map('states') | map('float', 0) | sum | round(3) }}
+      {{ costs | map('states') | map('float', 0) | sum | round(2) }}
   - name: Unmonitored cost daily
     unique_id: hass_energy_unmonitored_cost_daily
     state_class: total
@@ -137,7 +137,7 @@ template:
         'sensor.hass_energy_cost_server_monthly',
         'sensor.hass_energy_cost_washing_machine_monthly',
       ] %}
-      {{ costs | map('states') | map('float', 0) | sum | round(3) }}
+      {{ costs | map('states') | map('float', 0) | sum | round(2) }}
   - name: Unmonitored cost monthly
     unique_id: hass_energy_unmonitored_cost_monthly
     state_class: total
@@ -218,7 +218,7 @@ template:
         'sensor.hass_energy_cost_server_settlement',
         'sensor.hass_energy_cost_washing_machine_settlement',
       ] %}
-      {{ costs | map('states') | map('float', 0) | sum | round(3) }}
+      {{ costs | map('states') | map('float', 0) | sum | round(2) }}
   - name: Unmonitored cost settlement period
     unique_id: hass_energy_unmonitored_cost_settlement
     state_class: total

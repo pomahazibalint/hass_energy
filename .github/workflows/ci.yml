@@ -69,3 +69,10 @@ jobs:
             echo '::error::Home Assistant rejected the generated packages'
             exit 1
           fi
+
+      # check_config compiles templates but never renders one, and a template
+      # that compiles can still fail on the first state it reads.
+      - name: Render every generated template
+        run: >
+          uv run --python 3.13 --with homeassistant --no-project
+          python scripts/render_check.py examples/packages

@@ -8,6 +8,39 @@ the tariff — and the generator writes the Home Assistant packages: utility
 meters, banded pricing, per-device cost, house totals, and the automation that
 rolls the settlement period over.
 
+## Two halves
+
+**The integration** (`custom_components/hass_energy`) records what the meters
+did and works out what the supplier will charge for it: netting, price bands,
+the standing charge, VAT, and feed-in bought back at a fraction of what the
+same kWh costs. It exists because a settlement period is bounded by a meter
+reading rather than a date, and prices change inside one — neither of which a
+template sensor can hold.
+
+**The generator** (`src/hass_energy`) writes Home Assistant YAML packages for
+per-device metering and attribution: utility meters, device costs, house
+totals, diagnostics and projections.
+
+They share a settlement engine and can be used separately.
+
+## Installing the integration
+
+Requires Home Assistant 2025.11 or newer.
+
+Via HACS, as a custom repository: add this repository's URL with category
+**Integration**, download it, and restart Home Assistant. Or by hand, copy
+`custom_components/hass_energy` into your Home Assistant `config` directory and
+restart. Either way, add it from **Settings > Devices & services > Add
+integration > Energy Settlement**.
+
+It needs nothing installed at runtime: the settlement engine ships inside the
+component.
+
+Installed part-way through a settlement period, run the **Seed the settlement
+period** action with the figures from your last invoice, or it will account
+from zero for a period that began months ago. Past invoices can be brought in
+with **Import a settled invoice**, which records them as long-term statistics.
+
 ## Quick start
 
 ```sh

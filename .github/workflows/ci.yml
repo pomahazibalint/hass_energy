@@ -45,6 +45,14 @@ jobs:
       - name: Vendored engine is up to date
         run: uv run python scripts/vendor_billing.py --check
 
+  # Validates the manifest the way Home Assistant will, which is not something
+  # the integration's own tests can do: they import it, they do not vet it.
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
+
   home-assistant:
     # Validates the generated YAML against Home Assistant's own schemas rather
     # than against this project's model of them. Home Assistant needs 3.13.

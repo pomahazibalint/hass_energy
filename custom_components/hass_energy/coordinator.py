@@ -273,20 +273,32 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         """
 
         day = today or dt_util.now().date()
+        schedule = schedule_from_options(self.entry.options)
+        # Recording what the meter did must not depend on being able to price
+        # it. A period starting before the schedule does is normal on a fresh
+        # install, where the only price so far is the one dated today; the
+        # missing prices are reported as a repair, not by refusing the figures.
+        window_start = max(period_start, schedule.entries[0].valid_from)
+        end = max(day, window_start + timedelta(days=1))
+        segments = schedule.segments(window_start, end)
+        days = sum(segment.days for segment in segments) or 1
+
+        # Built whole and adopted at the end, so a period that cannot be
+        # divided up leaves the previous one untouched rather than replacing it
+        # with nothing.
+        buckets = {
+            segment.prices.valid_from.isoformat(): Bucket(
+                imported=imported * segment.days / days,
+                exported=exported * segment.days / days,
+            )
+            for segment in segments
+        }
         self.state = PeriodState(
             start=period_start,
+            buckets=buckets,
             last_import=self.state.last_import,
             last_export=self.state.last_export,
         )
-        schedule = schedule_from_options(self.entry.options)
-        end = max(day, period_start + timedelta(days=1))
-        segments = schedule.segments(max(period_start, schedule.entries[0].valid_from), end)
-        days = sum(segment.days for segment in segments) or 1
-        for segment in segments:
-            share = segment.days / days
-            self.state.buckets[segment.prices.valid_from.isoformat()] = Bucket(
-                imported=imported * share, exported=exported * share
-            )
 
     def build_bill(self, today: date | None = None) -> Bill:
         """Derive the settlement from what has been recorded so far."""
@@ -302,7 +314,12 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             imported.append(bucket.imported)
             exported.append(bucket.exported)
 
-        readings = MeterReadings(sum(imported), sum(exported))
+        # Totals come from everything recorded, not from the buckets the
+        # current schedule happens to reach. Editing prices changes which
+        # buckets a segment claims, and energy must not disappear from the bill
+        # because a price boundary moved. The per-segment figures only shape
+        # the apportionment, which _split_like renormalises.
+        readings = MeterReadings(self.state.imported, self.state.exported)
         # The engine wants the billed and surplus quantities per segment, and
         # only one of them is non-zero over the period, so the recorded split
         # of whichever it is carries the apportionment.

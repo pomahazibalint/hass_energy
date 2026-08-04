@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv sync --extra dev
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Types
+        run: uv run mypy
+
+      - name: Tests
+        run: uv run pytest
+
+      # Generated packages are committed, so a change to the generator that was
+      # not followed by a regeneration has to fail the build.
+      - name: Example packages are up to date
+        run: >
+          uv run hass-energy generate
+          --config examples/config.yaml
+          --output examples/packages
+          --check

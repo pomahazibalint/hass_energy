@@ -2,7 +2,9 @@
 # Change the project configuration or the generator instead.
 #
 # Utility meters for each grid flow and each monitored device, one per configured cycle
-# plus a meter spanning the billing settlement period.
+# plus a meter spanning the billing settlement period. Device settlement meters are split
+# into price bands, so energy is recorded against the band that was active when it was
+# used.
 
 utility_meter:
   hass_energy_grid_import_daily:
@@ -61,6 +63,9 @@ utility_meter:
     source: sensor.heat_pump_energy
     name: Heat pump settlement period
     unique_id: hass_energy_device_heat_pump_settlement
+    tariffs:
+    - subsidized
+    - unsubsidized
   hass_energy_device_water_heater_daily:
     source: sensor.water_heater_energy
     name: Water heater daily
@@ -75,6 +80,9 @@ utility_meter:
     source: sensor.water_heater_energy
     name: Water heater settlement period
     unique_id: hass_energy_device_water_heater_settlement
+    tariffs:
+    - subsidized
+    - unsubsidized
   hass_energy_device_ev_charger_daily:
     source: sensor.ev_charger_energy
     name: EV charger daily
@@ -89,11 +97,9 @@ utility_meter:
     source: sensor.ev_charger_energy
     name: EV charger settlement period
     unique_id: hass_energy_device_ev_charger_settlement
-  hass_energy_device_server_daily:
-    source: sensor.server_energy
-    name: Server daily
-    unique_id: hass_energy_device_server_daily
-    cycle: daily
+    tariffs:
+    - subsidized
+    - unsubsidized
   hass_energy_device_server_monthly:
     source: sensor.server_energy
     name: Server monthly
@@ -103,6 +109,9 @@ utility_meter:
     source: sensor.server_energy
     name: Server settlement period
     unique_id: hass_energy_device_server_settlement
+    tariffs:
+    - subsidized
+    - unsubsidized
   hass_energy_device_washing_machine_daily:
     source: sensor.washing_machine_energy
     name: Washing machine daily
@@ -117,3 +126,6 @@ utility_meter:
     source: sensor.washing_machine_energy
     name: Washing machine settlement period
     unique_id: hass_energy_device_washing_machine_settlement
+    tariffs:
+    - subsidized
+    - unsubsidized

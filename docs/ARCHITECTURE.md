@@ -82,12 +82,46 @@ Within a settlement period, consumption up to the subsidized allowance is billed
 at the subsidized price and the remainder at the market price. Under annual net
 metering, exported energy offsets imported energy before the bands are applied.
 
-Device and unmonitored costs are priced at the *marginal* rate — what that
-energy costs right now — rather than the average. This answers "what does
-running this cost me", but it means figures rise once the allowance is
-exhausted, and they are only exact at settlement. `pricing.yaml` also publishes
-the average price for the period for comparison.
+`sensor.<prefix>_price_band` is the only place the allowance is compared against
+consumption. The marginal price sensor reads it, and the automation in
+`settlement.yaml` mirrors it into the meter tariffs, so nothing can disagree
+about which band is active.
+
+Each device's settlement meter is configured with the bands as `utility_meter`
+tariffs, so energy accumulates into whichever band was active when it was used
+and the settlement cost is exact — no retroactive change when the allowance runs
+out. Shorter cycles are not split: the band changes at most once a settlement
+period, so splitting every cycle would multiply entities to record a distinction
+that is almost always empty. Their cost uses the price in force, which differs
+from the billed amount only across the single day the allowance runs out.
 
 House consumption is grid import less export plus local production, so it
 reflects what the house used rather than what it bought. Whatever the monitored
-devices do not account for is reported as unmonitored.
+devices do not account for is reported as unmonitored. Over a settlement period
+the billed total is known exactly, so unmonitored cost is the remainder rather
+than an estimate; over a shorter cycle there is no billed figure to divide up
+and the remainder is priced at the current rate.
+
+## Entity lifecycle
+
+Entity ids are the join between a generated package and the history Home
+Assistant has recorded against it. Renaming the project or a device changes
+them, and the old entities keep their history with nothing writing to it.
+
+Each run records the entity ids it produced in `.hass-energy-manifest.json` in
+the output directory — hidden and not YAML, so the package include ignores it.
+The next run diffs against it and reports anything that disappeared, along with
+how to migrate. A manifest that cannot be read is treated as absent: it exists
+to report renames and must never block a regeneration.
+
+## Verifying against a running instance
+
+Nothing offline can tell whether `sensor.grid_import_energy` is a real entity or
+a typo. `hass-energy validate --home-assistant URL` asks the instance, reading
+its states over the REST API and reporting configured sources it does not have.
+The token comes from `--token` or `$HASS_TOKEN`.
+
+Continuous integration goes the other way and validates the generated YAML
+against Home Assistant's own schemas with `hass --script check_config`. Note
+that command exits 0 even when it rejects a configuration, so the workflow
+inspects its output rather than its status.

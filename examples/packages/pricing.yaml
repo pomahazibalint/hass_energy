@@ -52,21 +52,26 @@ template:
       {{ [billed - 2523.0, 0] | max | round(3) }}
     availability: |-
       {{ has_value('sensor.hass_energy_settlement_energy') }}
+  - name: Active price band
+    unique_id: hass_energy_price_band
+    default_entity_id: sensor.hass_energy_price_band
+    state: |-
+      {% set billed = states('sensor.hass_energy_settlement_energy') | float(0) %}
+      {{ 'subsidized' if billed < 2523.0 else 'unsubsidized' }}
+    availability: |-
+      {{ has_value('sensor.hass_energy_settlement_energy') }}
+    attributes:
+      tariff: A1
   - name: Marginal energy price
     unique_id: hass_energy_marginal_price
     default_entity_id: sensor.hass_energy_marginal_price
     state_class: measurement
     unit_of_measurement: Ft/kWh
     state: |-
-      {% set billed = states('sensor.hass_energy_settlement_energy') | float(0) %}
-      {{ 36.386 if billed < 2523.0 else 70.104 }}
+      {% set band = states('sensor.hass_energy_price_band') %}
+      {{ 36.386 if band == 'subsidized' else 70.104 }}
     availability: |-
-      {{ has_value('sensor.hass_energy_settlement_energy') }}
-    attributes:
-      tariff: A1
-      band: |-
-        {% set billed = states('sensor.hass_energy_settlement_energy') | float(0) %}
-        {{ 'subsidized' if billed < 2523.0 else 'unsubsidized' }}
+      {{ has_value('sensor.hass_energy_price_band') }}
   - name: Settlement period cost
     unique_id: hass_energy_settlement_cost
     default_entity_id: sensor.hass_energy_settlement_cost

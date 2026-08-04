@@ -40,6 +40,15 @@ configuration error rather than loading them incorrectly.
 | `hass-energy generate --config C --output D` | Write the packages into `D` |
 | `hass-energy generate ... --check` | Fail if `D` is out of date; changes nothing |
 | `hass-energy validate --config C` | Check that a configuration loads and can generate |
+| `hass-energy validate ... --home-assistant URL` | Also confirm the source entities exist |
+
+The instance check reads entity states over the REST API and needs a long-lived
+access token, from `--token` or `$HASS_TOKEN`:
+
+```sh
+HASS_TOKEN=... uv run hass-energy validate --config config.yaml \
+  --home-assistant http://homeassistant.local:8123
+```
 
 `--check` exists for continuous integration: generated packages are committed to
 the repository, so a generator change without a regeneration has to fail.
@@ -71,6 +80,9 @@ grid:
 
 meters:
   cycles: [daily, monthly]  # a settlement meter is always generated too
+  net_consumption: false    # utility_meter options, applied to every meter
+  delta_values: false
+  always_available: false
 
 devices:
   - id: heat_pump
@@ -78,7 +90,15 @@ devices:
     name: Heat pump
     room: Utility room
     category: heating
+  - id: server
+    entity: sensor.server_energy
+    cycles: [monthly]       # overrides the project cycles for this device
 ```
+
+Source sensors must be **cumulative energy in kWh** (`state_class:
+total_increasing`), not power. Every meter starts at zero on first run — Home
+Assistant does not backfill history — so seed the settlement meters with
+`utility_meter.calibrate` if you install mid-period.
 
 ## What gets generated
 
@@ -86,9 +106,9 @@ devices:
 | --- | --- |
 | `utility_meters.yaml` | A meter per grid flow and per device, for every cycle |
 | `pricing.yaml` | Billed energy split into price bands, unit prices, settlement cost |
-| `device_costs.yaml` | Per-device cost at the marginal rate |
+| `device_costs.yaml` | Per-device cost, exact per band over the settlement period |
 | `house_totals.yaml` | House consumption, monitored vs unmonitored energy and cost |
-| `settlement.yaml` | Automation resetting the settlement meters on the billing date |
+| `settlement.yaml` | Automations resetting the settlement meters and following the price band |
 
 Generated files carry a header saying so. They are artifacts: edit the
 configuration or the generator, never the output.

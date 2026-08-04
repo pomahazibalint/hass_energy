@@ -29,6 +29,10 @@ grid:
 
 meters:
   cycles: [daily, monthly]
+  # Matches how the source sensors behave: these report a rising total, so the
+  # defaults are left alone.
+  net_consumption: false
+  delta_values: false
 
 devices:
   - id: heat_pump
@@ -50,6 +54,9 @@ devices:
     entity: sensor.server_energy
     room: Office
     category: always_on
+    # Draws an almost constant load, so a daily meter would say nothing a
+    # monthly one does not.
+    cycles: [monthly]
   - id: washing_machine
     entity: sensor.washing_machine_energy
     name: Washing machine

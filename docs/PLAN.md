@@ -37,10 +37,14 @@ Build a generator-driven Home Assistant energy accounting system with Hungarian 
 
 ## Current state
 The generator produces five packages from a configuration: utility meters,
-banded pricing, device costs, house totals and the settlement reset automation.
-`hass-energy generate --check` guards determinism in continuous integration,
-and `examples/` holds a configuration with its generated output committed
-beside it.
+banded pricing, device costs, house totals and the settlement automations.
+Device settlement meters carry the price bands as utility_meter tariffs, so
+settlement costs are exact rather than estimated at the current rate.
+
+Continuous integration guards determinism with `generate --check`, and
+validates the generated YAML against Home Assistant's own schemas with
+`hass --script check_config`. `examples/` holds a configuration with its
+generated output committed beside it.
 
 Nothing is generated for dashboards yet. Diagnostics and projections are the
 natural next step, since both dashboards and alerting depend on them.

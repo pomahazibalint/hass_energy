@@ -31,7 +31,6 @@ template:
         'sensor.hass_energy_device_heat_pump_daily',
         'sensor.hass_energy_device_water_heater_daily',
         'sensor.hass_energy_device_ev_charger_daily',
-        'sensor.hass_energy_device_server_daily',
         'sensor.hass_energy_device_washing_machine_daily',
       ] %}
       {{ meters | map('states') | map('float', 0) | sum | round(3) }}
@@ -57,7 +56,6 @@ template:
         'sensor.hass_energy_cost_heat_pump_daily',
         'sensor.hass_energy_cost_water_heater_daily',
         'sensor.hass_energy_cost_ev_charger_daily',
-        'sensor.hass_energy_cost_server_daily',
         'sensor.hass_energy_cost_washing_machine_daily',
       ] %}
       {{ costs | map('states') | map('float', 0) | sum | round(2) }}
@@ -204,11 +202,16 @@ template:
     unit_of_measurement: kWh
     state: |-
       {% set meters = [
-        'sensor.hass_energy_device_heat_pump_settlement',
-        'sensor.hass_energy_device_water_heater_settlement',
-        'sensor.hass_energy_device_ev_charger_settlement',
-        'sensor.hass_energy_device_server_settlement',
-        'sensor.hass_energy_device_washing_machine_settlement',
+        'sensor.hass_energy_device_heat_pump_settlement_subsidized',
+        'sensor.hass_energy_device_heat_pump_settlement_unsubsidized',
+        'sensor.hass_energy_device_water_heater_settlement_subsidized',
+        'sensor.hass_energy_device_water_heater_settlement_unsubsidized',
+        'sensor.hass_energy_device_ev_charger_settlement_subsidized',
+        'sensor.hass_energy_device_ev_charger_settlement_unsubsidized',
+        'sensor.hass_energy_device_server_settlement_subsidized',
+        'sensor.hass_energy_device_server_settlement_unsubsidized',
+        'sensor.hass_energy_device_washing_machine_settlement_subsidized',
+        'sensor.hass_energy_device_washing_machine_settlement_unsubsidized',
       ] %}
       {{ meters | map('states') | map('float', 0) | sum | round(3) }}
   - name: Unmonitored consumption settlement period
@@ -243,22 +246,20 @@ template:
     state_class: total
     unit_of_measurement: Ft
     state: |-
-      {% set energy = states('sensor.hass_energy_unmonitored_energy_settlement') | float(0) %}
-      {% set price = states('sensor.hass_energy_marginal_price') | float(0) %}
-      {{ (energy * price) | round(2) }}
+      {% set total = states('sensor.hass_energy_settlement_cost') | float(0) %}
+      {% set measured = states('sensor.hass_energy_monitored_cost_settlement') | float(0) %}
+      {{ [total - measured, 0] | max | round(2) }}
     availability: |-
-      {{ has_value('sensor.hass_energy_unmonitored_energy_settlement') and has_value('sensor.hass_energy_marginal_price') }}
+      {{ has_value('sensor.hass_energy_settlement_cost') and has_value('sensor.hass_energy_monitored_cost_settlement') }}
   - name: Total cost settlement period
     unique_id: hass_energy_total_cost_settlement
     default_entity_id: sensor.hass_energy_total_cost_settlement
     state_class: total
     unit_of_measurement: Ft
     state: |-
-      {% set measured = states('sensor.hass_energy_monitored_cost_settlement') | float(0) %}
-      {% set rest = states('sensor.hass_energy_unmonitored_cost_settlement') | float(0) %}
-      {{ (measured + rest) | round(2) }}
+      {{ states('sensor.hass_energy_settlement_cost') | float(0) | round(2) }}
     availability: |-
-      {{ has_value('sensor.hass_energy_monitored_cost_settlement') and has_value('sensor.hass_energy_unmonitored_cost_settlement') }}
+      {{ has_value('sensor.hass_energy_settlement_cost') }}
   - name: Solar self-consumption settlement period
     unique_id: hass_energy_self_consumption_settlement
     default_entity_id: sensor.hass_energy_self_consumption_settlement

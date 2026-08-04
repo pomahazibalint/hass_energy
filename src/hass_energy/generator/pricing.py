@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..config import SETTLEMENT_CYCLE, ProjectConfig
+from ..config import TARIFF_BANDS as BANDS
 from . import templates as t
 from .base import GenerationError, Generator
 from .entities import Entities
@@ -16,6 +17,7 @@ SETTLEMENT_ENERGY = "settlement_energy"
 SUBSIDIZED_ENERGY = "subsidized_energy"
 UNSUBSIDIZED_ENERGY = "unsubsidized_energy"
 SUBSIDIZED_REMAINING = "subsidized_remaining"
+PRICE_BAND = "price_band"
 MARGINAL_PRICE = "marginal_price"
 SETTLEMENT_COST = "settlement_cost"
 AVERAGE_PRICE = "average_price"
@@ -107,25 +109,31 @@ class PricingGenerator(Generator):
                 state_class="total",
                 available_from=(billed,),
             ),
+            # The one place the allowance is compared against consumption. The
+            # price sensor and the meter tariffs both follow this sensor, so
+            # they cannot disagree about which band is active.
+            t.sensor(
+                name="Active price band",
+                unique_id=entities.pricing_id(PRICE_BAND),
+                state=t.template(
+                    t.assign("billed", t.numeric_state(billed)),
+                    t.expression(f"'{BANDS[0]}' if billed < {limit} else '{BANDS[1]}'"),
+                ),
+                available_from=(billed,),
+                attributes={"tariff": config.billing.tariff},
+            ),
             t.sensor(
                 name="Marginal energy price",
                 unique_id=entities.pricing_id(MARGINAL_PRICE),
                 state=t.template(
-                    t.assign("billed", t.numeric_state(billed)),
+                    t.assign("band", f"states('{entities.pricing(PRICE_BAND)}')"),
                     t.expression(
-                        f"{subsidized_price} if billed < {limit} else {unsubsidized_price}"
+                        f"{subsidized_price} if band == '{BANDS[0]}' else {unsubsidized_price}"
                     ),
                 ),
                 unit=pricing.price_unit,
                 state_class="measurement",
-                available_from=(billed,),
-                attributes={
-                    "tariff": config.billing.tariff,
-                    "band": t.template(
-                        t.assign("billed", t.numeric_state(billed)),
-                        t.expression(f"'subsidized' if billed < {limit} else 'unsubsidized'"),
-                    ),
-                },
+                available_from=(entities.pricing(PRICE_BAND),),
             ),
             t.sensor(
                 name="Settlement period cost",

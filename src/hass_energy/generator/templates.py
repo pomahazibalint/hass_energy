@@ -72,8 +72,8 @@ def sensor(
     name: str,
     unique_id: str,
     state: str,
-    unit: str,
-    state_class: str,
+    unit: str | None = None,
+    state_class: str | None = None,
     device_class: str | None = None,
     available_from: tuple[str, ...] = (),
     attributes: dict[str, str] | None = None,
@@ -91,8 +91,10 @@ def sensor(
     }
     if device_class is not None:
         entry["device_class"] = device_class
-    entry["state_class"] = state_class
-    entry["unit_of_measurement"] = unit
+    if state_class is not None:
+        entry["state_class"] = state_class
+    if unit is not None:
+        entry["unit_of_measurement"] = unit
     entry["state"] = state
     if available_from:
         entry["availability"] = availability(*available_from)

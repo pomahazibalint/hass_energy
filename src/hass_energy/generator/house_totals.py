@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..config import ProjectConfig
+from ..config import SETTLEMENT_CYCLE, ProjectConfig
 from . import templates as t
 from .base import GenerationError, Generator
 from .entities import Entities
-from .pricing import ENERGY_UNIT, MARGINAL_PRICE
+from .pricing import ENERGY_UNIT, MARGINAL_PRICE, SETTLEMENT_COST
 from .utility_meters import cycle_label
 
 HOUSE_ENERGY = "house_energy"
@@ -109,32 +109,54 @@ class HouseTotalsGenerator(Generator):
                     state_class=t.COST_STATE_CLASS,
                 )
             )
+            # Over a settlement period the billed total is known exactly, so
+            # unmonitored cost is the remainder rather than an estimate. Over a
+            # shorter cycle there is no billed figure to divide up, and the
+            # remainder is priced at the rate in force.
+            total_sources: tuple[str, ...]
+            unmonitored_cost_sources: tuple[str, ...]
+            if cycle == SETTLEMENT_CYCLE:
+                billed = entities.pricing(SETTLEMENT_COST)
+                total_state = t.expression(f"{t.numeric_state(billed)} | round(2)")
+                total_sources = (billed,)
+                unmonitored_cost_state = t.template(
+                    t.assign("total", t.numeric_state(billed)),
+                    t.assign("measured", t.numeric_state(monitored_cost)),
+                    t.expression("[total - measured, 0] | max | round(2)"),
+                )
+                unmonitored_cost_sources = (billed, monitored_cost)
+            else:
+                total_state = t.template(
+                    t.assign("measured", t.numeric_state(monitored_cost)),
+                    t.assign("rest", t.numeric_state(unmonitored_cost)),
+                    t.expression("(measured + rest) | round(2)"),
+                )
+                total_sources = (monitored_cost, unmonitored_cost)
+                unmonitored_cost_state = t.template(
+                    t.assign("energy", t.numeric_state(unmonitored)),
+                    t.assign("price", t.numeric_state(price)),
+                    t.expression("(energy * price) | round(2)"),
+                )
+                unmonitored_cost_sources = (unmonitored, price)
+
             sensors.append(
                 t.sensor(
                     name=f"Unmonitored cost {label}",
                     unique_id=entities.total_id(UNMONITORED_COST, cycle),
-                    state=t.template(
-                        t.assign("energy", t.numeric_state(unmonitored)),
-                        t.assign("price", t.numeric_state(price)),
-                        t.expression("(energy * price) | round(2)"),
-                    ),
+                    state=unmonitored_cost_state,
                     unit=currency,
                     state_class=t.COST_STATE_CLASS,
-                    available_from=(unmonitored, price),
+                    available_from=unmonitored_cost_sources,
                 )
             )
             sensors.append(
                 t.sensor(
                     name=f"Total cost {label}",
                     unique_id=entities.total_id(TOTAL_COST, cycle),
-                    state=t.template(
-                        t.assign("measured", t.numeric_state(monitored_cost)),
-                        t.assign("rest", t.numeric_state(unmonitored_cost)),
-                        t.expression("(measured + rest) | round(2)"),
-                    ),
+                    state=total_state,
                     unit=currency,
                     state_class=t.COST_STATE_CLASS,
-                    available_from=(monitored_cost, unmonitored_cost),
+                    available_from=total_sources,
                 )
             )
 

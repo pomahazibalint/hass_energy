@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, NamedTuple
 
-from ..config import SETTLEMENT_CYCLE, ProjectConfig
+from ..config import SETTLEMENT_CYCLE, TARIFF_BANDS, MeterConfig, ProjectConfig
 from .base import GenerationError, Generator
 from .entities import Entities
 
@@ -31,7 +31,14 @@ def cycle_label(cycle: str) -> str:
     return "settlement period" if cycle == SETTLEMENT_CYCLE else cycle
 
 
-def meter(source: str, name: str, object_id: str, cycle: str) -> dict[str, Any]:
+def meter(
+    source: str,
+    name: str,
+    object_id: str,
+    cycle: str,
+    options: MeterConfig,
+    bands: tuple[str, ...] = (),
+) -> dict[str, Any]:
     """One utility_meter entry.
 
     The settlement meter is given no cycle: a settlement period rarely starts on
@@ -41,6 +48,14 @@ def meter(source: str, name: str, object_id: str, cycle: str) -> dict[str, Any]:
     entry: dict[str, Any] = {"source": source, "name": name, "unique_id": object_id}
     if cycle != SETTLEMENT_CYCLE:
         entry["cycle"] = cycle
+    if bands:
+        entry["tariffs"] = list(bands)
+    if options.net_consumption:
+        entry["net_consumption"] = True
+    if options.delta_values:
+        entry["delta_values"] = True
+    if options.always_available:
+        entry["always_available"] = True
     return entry
 
 
@@ -50,7 +65,9 @@ class UtilityMeterGenerator(Generator):
     filename = "utility_meters.yaml"
     description = (
         "Utility meters for each grid flow and each monitored device, one per "
-        "configured cycle plus a meter spanning the billing settlement period."
+        "configured cycle plus a meter spanning the billing settlement period. "
+        "Device settlement meters are split into price bands, so energy is "
+        "recorded against the band that was active when it was used."
     )
 
     def build(self, config: ProjectConfig) -> dict[str, Any]:
@@ -60,6 +77,7 @@ class UtilityMeterGenerator(Generator):
             )
 
         entities = Entities(config)
+        options = config.meters
         meters: dict[str, dict[str, Any]] = {}
 
         for flow in GRID_FLOWS:
@@ -73,16 +91,23 @@ class UtilityMeterGenerator(Generator):
                     name=f"{flow.label} {cycle_label(cycle)}",
                     object_id=object_id,
                     cycle=cycle,
+                    options=options,
                 )
 
         for device in config.devices:
-            for cycle in config.all_cycles:
+            for cycle in config.cycles_for(device):
                 object_id = entities.device_meter_id(device.id, cycle)
                 meters[object_id] = meter(
                     source=device.entity,
                     name=f"{device.display_name} {cycle_label(cycle)}",
                     object_id=object_id,
                     cycle=cycle,
+                    options=options,
+                    # Only the settlement meter is banded. Within a shorter
+                    # cycle the band changes at most once a year, so splitting
+                    # every cycle would triple the entity count to record a
+                    # distinction that is almost always empty.
+                    bands=TARIFF_BANDS if cycle == SETTLEMENT_CYCLE else (),
                 )
 
         return {"utility_meter": meters}

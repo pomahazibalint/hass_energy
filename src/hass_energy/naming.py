@@ -8,20 +8,43 @@ recorder history behind it — and keeps a rename to a single place.
 from __future__ import annotations
 
 import re
+import unicodedata
 
 _NON_SLUG = re.compile(r"[^a-z0-9]+")
 
 
 def slugify(value: str) -> str:
-    """Reduce arbitrary text to a Home Assistant object id fragment."""
+    """Reduce arbitrary text to a Home Assistant object id fragment.
 
-    return _NON_SLUG.sub("_", value.strip().lower()).strip("_")
+    Accented letters are folded to their base letter rather than dropped, so
+    ``Nyaraló`` becomes ``nyaralo`` and not ``nyaral``.
+    """
+
+    decomposed = unicodedata.normalize("NFKD", value.strip().lower())
+    folded = "".join(char for char in decomposed if not unicodedata.combining(char))
+    return _NON_SLUG.sub("_", folded).strip("_")
 
 
 def sensor(object_id: str) -> str:
     """Entity id of a sensor with the given object id."""
 
     return f"sensor.{object_id}"
+
+
+def band_sensor(object_id: str, band: str) -> str:
+    """Entity id of one tariff band of a utility meter.
+
+    Home Assistant appends the tariff to the meter's object id when a meter is
+    configured with ``tariffs``.
+    """
+
+    return f"sensor.{object_id}_{band}"
+
+
+def tariff_select(object_id: str) -> str:
+    """Entity id of the select a tariffed utility meter creates."""
+
+    return f"select.{object_id}"
 
 
 def device_meter(prefix: str, device_id: str, cycle: str) -> str:

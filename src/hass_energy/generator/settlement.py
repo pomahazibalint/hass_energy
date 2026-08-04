@@ -1,19 +1,19 @@
-"""Automation that rolls the settlement period over."""
+"""Automations that drive the settlement period and the active price band."""
 
 from __future__ import annotations
 
 import calendar
 from typing import Any
 
-from ..config import SETTLEMENT_CYCLE, ProjectConfig
+from ..config import TARIFF_BANDS, ProjectConfig
 from . import templates as t
 from .base import GenerationError, Generator
 from .entities import Entities
-from .utility_meters import GRID_FLOWS
+from .pricing import PRICE_BAND
 
 
 class SettlementGenerator(Generator):
-    """Resets the settlement meters on the billing anniversary.
+    """Rolls the settlement period over and keeps the meter tariffs in step.
 
     Home Assistant's yearly cycle always resets on 1 January, and its offset is
     capped well below a month, so a settlement period starting on any other date
@@ -23,10 +23,74 @@ class SettlementGenerator(Generator):
 
     filename = "settlement.yaml"
     description = (
-        "Resets every settlement meter on the billing anniversary. The meters "
-        "carry no cycle of their own, so this automation is what starts a new "
-        "settlement period."
+        "Resets every settlement meter on the billing anniversary, and keeps "
+        "each device's meter recording into whichever price band is currently "
+        "active. Without these the settlement period never restarts and all "
+        "energy lands in the subsidized band."
     )
+
+    def _reset_automation(self, config: ProjectConfig, entities: Entities) -> dict[str, Any]:
+        billing = config.billing
+        day = billing.settlement_day
+        month_name = calendar.month_name[billing.settlement_month]
+
+        return {
+            "id": f"{entities.prefix}_settlement_reset",
+            "alias": f"Reset settlement meters on {day} {month_name}",
+            "description": (
+                "Starts a new billing settlement period by calibrating every "
+                "settlement meter back to zero."
+            ),
+            "mode": "single",
+            "triggers": [{"trigger": "time", "at": "00:00:00"}],
+            "conditions": [
+                {
+                    "condition": "template",
+                    "value_template": t.expression(
+                        f"now().month == {billing.settlement_month} and now().day == {day}"
+                    ),
+                }
+            ],
+            "actions": [
+                {
+                    "action": "utility_meter.calibrate",
+                    "target": {"entity_id": list(entities.settlement_meters())},
+                    "data": {"value": "0"},
+                }
+            ],
+        }
+
+    def _band_automation(self, entities: Entities) -> dict[str, Any]:
+        band_sensor = entities.pricing(PRICE_BAND)
+        options = ", ".join(f"'{band}'" for band in TARIFF_BANDS)
+
+        return {
+            "id": f"{entities.prefix}_price_band",
+            "alias": "Follow the active energy price band",
+            "description": (
+                "Points every device settlement meter at the band its energy "
+                "should be recorded against. Also runs at startup, so a band "
+                "change missed while Home Assistant was down is corrected."
+            ),
+            "mode": "single",
+            "triggers": [
+                {"trigger": "state", "entity_id": band_sensor},
+                {"trigger": "homeassistant", "event": "start"},
+            ],
+            "conditions": [
+                {
+                    "condition": "template",
+                    "value_template": t.expression(f"states('{band_sensor}') in [{options}]"),
+                }
+            ],
+            "actions": [
+                {
+                    "action": "select.select_option",
+                    "target": {"entity_id": list(entities.band_selects())},
+                    "data": {"option": t.expression(f"states('{band_sensor}')")},
+                }
+            ],
+        }
 
     def build(self, config: ProjectConfig) -> dict[str, Any]:
         if config.grid.import_entity is None:
@@ -35,44 +99,8 @@ class SettlementGenerator(Generator):
             )
 
         entities = Entities(config)
-        billing = config.billing
-        meters = [
-            entities.grid_meter(flow.key, SETTLEMENT_CYCLE)
-            for flow in GRID_FLOWS
-            if getattr(config.grid, flow.field) is not None
-        ]
-        meters += [entities.device_meter(device.id, SETTLEMENT_CYCLE) for device in config.devices]
+        automations = [self._reset_automation(config, entities)]
+        if config.devices:
+            automations.append(self._band_automation(entities))
 
-        day = billing.settlement_day
-        month_name = calendar.month_name[billing.settlement_month]
-
-        return {
-            "automation": [
-                {
-                    "id": f"{entities.prefix}_settlement_reset",
-                    "alias": f"Reset settlement meters on {day} {month_name}",
-                    "description": (
-                        "Starts a new billing settlement period by calibrating every "
-                        "settlement meter back to zero."
-                    ),
-                    "mode": "single",
-                    "triggers": [{"trigger": "time", "at": "00:00:00"}],
-                    "conditions": [
-                        {
-                            "condition": "template",
-                            "value_template": t.expression(
-                                f"now().month == {billing.settlement_month} "
-                                f"and now().day == {day}"
-                            ),
-                        }
-                    ],
-                    "actions": [
-                        {
-                            "action": "utility_meter.calibrate",
-                            "target": {"entity_id": meters},
-                            "data": {"value": "0"},
-                        }
-                    ],
-                }
-            ]
-        }
+        return {"automation": automations}

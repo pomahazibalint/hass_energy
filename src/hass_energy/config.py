@@ -19,6 +19,26 @@ SUPPORTED_CYCLES = ("hourly", "daily", "weekly", "monthly", "quarterly", "yearly
 #: meter never resets on its own and is calibrated by a generated automation.
 SETTLEMENT_CYCLE = "settlement"
 
+#: Price bands within a settlement period, cheapest first. Settlement meters are
+#: configured with these as utility_meter tariffs, so energy accumulates into
+#: the band that was active when it was used. Home Assistant selects the first
+#: tariff by default, which is where a fresh settlement period starts.
+TARIFF_BANDS = ("subsidized", "unsubsidized")
+
+
+def _validate_cycles(cycles: tuple[str, ...]) -> tuple[str, ...]:
+    """Reject cycles Home Assistant does not implement, and repeats."""
+
+    unknown = [cycle for cycle in cycles if cycle not in SUPPORTED_CYCLES]
+    if unknown:
+        raise ValueError(
+            f"Unsupported meter cycles: {', '.join(unknown)}. "
+            f"Supported cycles: {', '.join(SUPPORTED_CYCLES)}."
+        )
+    if len(set(cycles)) != len(cycles):
+        raise ValueError("Meter cycles must be unique.")
+    return cycles
+
 
 class TariffConfig(BaseModel):
     """Price bands applied within one settlement period.
@@ -89,22 +109,23 @@ class GridConfig(BaseModel):
 
 
 class MeterConfig(BaseModel):
-    """Which reset cycles are generated alongside the settlement meter."""
+    """Reset cycles and the utility_meter options applied to every meter.
+
+    The options match Home Assistant's own, and are set here rather than per
+    meter because they describe how the source sensors behave, which is a
+    property of the installation rather than of one device.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     cycles: tuple[str, ...] = ("daily", "monthly")
+    net_consumption: bool = False
+    delta_values: bool = False
+    always_available: bool = False
 
     @model_validator(mode="after")
     def _check_cycles(self) -> MeterConfig:
-        unknown = [cycle for cycle in self.cycles if cycle not in SUPPORTED_CYCLES]
-        if unknown:
-            raise ValueError(
-                f"Unsupported meter cycles: {', '.join(unknown)}. "
-                f"Supported cycles: {', '.join(SUPPORTED_CYCLES)}."
-            )
-        if len(set(self.cycles)) != len(self.cycles):
-            raise ValueError("Meter cycles must be unique.")
+        _validate_cycles(self.cycles)
         return self
 
 
@@ -118,6 +139,15 @@ class DeviceConfig(BaseModel):
     room: str | None = None
     category: str | None = None
     name: str | None = None
+    #: Overrides the project's cycles. A device that only matters as a monthly
+    #: total does not need to spend a daily meter on the recorder.
+    cycles: tuple[str, ...] | None = None
+
+    @model_validator(mode="after")
+    def _check_cycles(self) -> DeviceConfig:
+        if self.cycles is not None:
+            _validate_cycles(self.cycles)
+        return self
 
     @property
     def display_name(self) -> str:
@@ -152,6 +182,17 @@ class ProjectConfig(BaseModel):
 
     @property
     def all_cycles(self) -> tuple[str, ...]:
-        """Every cycle a meter is generated for, settlement period included."""
+        """Every cycle a grid meter is generated for, settlement included."""
 
         return (*self.meters.cycles, SETTLEMENT_CYCLE)
+
+    def cycles_for(self, device: DeviceConfig) -> tuple[str, ...]:
+        """Cycles generated for one device, settlement included."""
+
+        return (*(device.cycles if device.cycles is not None else self.meters.cycles),
+                SETTLEMENT_CYCLE)
+
+    def devices_with_cycle(self, cycle: str) -> tuple[DeviceConfig, ...]:
+        """Devices that have a meter for the given cycle."""
+
+        return tuple(device for device in self.devices if cycle in self.cycles_for(device))

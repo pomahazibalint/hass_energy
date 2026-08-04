@@ -16,6 +16,39 @@ def package(config: ProjectConfig, filename: str) -> dict[str, Any]:
     return parsed
 
 
+def template_sensors(config: ProjectConfig) -> list[dict[str, Any]]:
+    """Every template sensor across every generated package."""
+
+    sensors = []
+    for file in generate(config):
+        parsed = yaml.safe_load(file.content)
+        for block in parsed.get("template", []):
+            sensors.extend(block["sensor"])
+    return sensors
+
+
+def generated_entities(config: ProjectConfig) -> set[str]:
+    """Entity ids Home Assistant will create from the generated packages."""
+
+    meters = package(config, "utility_meters.yaml")["utility_meter"]
+    entities = {f"sensor.{object_id}" for object_id in meters}
+    entities |= {sensor["default_entity_id"] for sensor in template_sensors(config)}
+    return entities
+
+
+def referenced_entities(config: ProjectConfig) -> set[str]:
+    """Entity ids the generated packages read or act on."""
+
+    referenced: set[str] = set()
+    for file in generate(config):
+        referenced |= set(re.findall(r"(?:states|has_value)\('([^']+)'\)", file.content))
+        parsed = yaml.safe_load(file.content)
+        for automation in parsed.get("automation", []):
+            for action in automation["actions"]:
+                referenced |= set(action["target"]["entity_id"])
+    return referenced
+
+
 def test_every_generated_file_is_valid_yaml(config: ProjectConfig) -> None:
     files = generate(config)
 
@@ -201,6 +234,36 @@ def test_cycles_follow_the_configuration() -> None:
 def test_generation_fails_without_a_grid_import_sensor(generator: Generator) -> None:
     with pytest.raises(GenerationError, match=re.escape("grid.import_entity is required")):
         generator.build(ProjectConfig())
+
+
+def test_template_entity_ids_are_pinned_to_the_unique_id(config: ProjectConfig) -> None:
+    # Home Assistant would otherwise slugify the name, and nothing that
+    # references the sensor could predict the result.
+    for sensor in template_sensors(config):
+        assert sensor["default_entity_id"] == f"sensor.{sensor['unique_id']}"
+
+
+def test_every_referenced_entity_is_generated_or_configured(config: ProjectConfig) -> None:
+    sources = {config.grid.import_entity, config.grid.export_entity, config.grid.production_entity}
+    sources |= {device.entity for device in config.devices}
+    known = generated_entities(config) | {entity for entity in sources if entity}
+
+    assert referenced_entities(config) <= known
+
+
+def test_references_hold_without_solar_or_devices() -> None:
+    config = ProjectConfig(grid=GridConfig(import_entity="sensor.grid_import"))
+    known = generated_entities(config) | {"sensor.grid_import"}
+
+    assert referenced_entities(config) <= known
+
+
+def test_generated_entity_ids_are_unique(config: ProjectConfig) -> None:
+    meters = list(package(config, "utility_meters.yaml")["utility_meter"])
+    template_ids = [sensor["default_entity_id"] for sensor in template_sensors(config)]
+    all_ids = [f"sensor.{object_id}" for object_id in meters] + template_ids
+
+    assert len(all_ids) == len(set(all_ids))
 
 
 def test_every_registered_generator_has_a_distinct_filename() -> None:

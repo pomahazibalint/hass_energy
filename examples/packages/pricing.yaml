@@ -9,6 +9,7 @@ template:
 - sensor:
   - name: Billed energy this settlement period
     unique_id: hass_energy_settlement_energy
+    default_entity_id: sensor.hass_energy_settlement_energy
     device_class: energy
     state_class: total
     unit_of_measurement: kWh
@@ -20,6 +21,7 @@ template:
       {{ has_value('sensor.hass_energy_grid_import_settlement') and has_value('sensor.hass_energy_grid_export_settlement') }}
   - name: Subsidized energy used
     unique_id: hass_energy_subsidized_energy
+    default_entity_id: sensor.hass_energy_subsidized_energy
     device_class: energy
     state_class: total
     unit_of_measurement: kWh
@@ -30,6 +32,7 @@ template:
       {{ has_value('sensor.hass_energy_settlement_energy') }}
   - name: Subsidized energy remaining
     unique_id: hass_energy_subsidized_remaining
+    default_entity_id: sensor.hass_energy_subsidized_remaining
     device_class: energy
     state_class: measurement
     unit_of_measurement: kWh
@@ -40,6 +43,7 @@ template:
       {{ has_value('sensor.hass_energy_settlement_energy') }}
   - name: Unsubsidized energy used
     unique_id: hass_energy_unsubsidized_energy
+    default_entity_id: sensor.hass_energy_unsubsidized_energy
     device_class: energy
     state_class: total
     unit_of_measurement: kWh
@@ -50,6 +54,7 @@ template:
       {{ has_value('sensor.hass_energy_settlement_energy') }}
   - name: Marginal energy price
     unique_id: hass_energy_marginal_price
+    default_entity_id: sensor.hass_energy_marginal_price
     state_class: measurement
     unit_of_measurement: Ft/kWh
     state: |-
@@ -64,6 +69,7 @@ template:
         {{ 'subsidized' if billed < 2523.0 else 'unsubsidized' }}
   - name: Settlement period cost
     unique_id: hass_energy_settlement_cost
+    default_entity_id: sensor.hass_energy_settlement_cost
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -74,6 +80,7 @@ template:
       {{ has_value('sensor.hass_energy_subsidized_energy') and has_value('sensor.hass_energy_unsubsidized_energy') }}
   - name: Average energy price this settlement period
     unique_id: hass_energy_average_price
+    default_entity_id: sensor.hass_energy_average_price
     state_class: measurement
     unit_of_measurement: Ft/kWh
     state: |-

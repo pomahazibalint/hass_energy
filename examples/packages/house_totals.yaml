@@ -9,6 +9,7 @@ template:
 - sensor:
   - name: House consumption daily
     unique_id: hass_energy_house_energy_daily
+    default_entity_id: sensor.hass_energy_house_energy_daily
     device_class: energy
     state_class: total
     unit_of_measurement: kWh
@@ -21,6 +22,7 @@ template:
       {{ has_value('sensor.hass_energy_grid_import_daily') and has_value('sensor.hass_energy_grid_export_daily') and has_value('sensor.hass_energy_grid_production_daily') }}
   - name: Monitored consumption daily
     unique_id: hass_energy_monitored_energy_daily
+    default_entity_id: sensor.hass_energy_monitored_energy_daily
     device_class: energy
     state_class: total
     unit_of_measurement: kWh
@@ -35,6 +37,7 @@ template:
       {{ meters | map('states') | map('float', 0) | sum | round(3) }}
   - name: Unmonitored consumption daily
     unique_id: hass_energy_unmonitored_energy_daily
+    default_entity_id: sensor.hass_energy_unmonitored_energy_daily
     device_class: energy
     state_class: total
     unit_of_measurement: kWh
@@ -46,6 +49,7 @@ template:
       {{ has_value('sensor.hass_energy_house_energy_daily') and has_value('sensor.hass_energy_monitored_energy_daily') }}
   - name: Monitored cost daily
     unique_id: hass_energy_monitored_cost_daily
+    default_entity_id: sensor.hass_energy_monitored_cost_daily
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -59,6 +63,7 @@ template:
       {{ costs | map('states') | map('float', 0) | sum | round(2) }}
   - name: Unmonitored cost daily
     unique_id: hass_energy_unmonitored_cost_daily
+    default_entity_id: sensor.hass_energy_unmonitored_cost_daily
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -69,6 +74,7 @@ template:
       {{ has_value('sensor.hass_energy_unmonitored_energy_daily') and has_value('sensor.hass_energy_marginal_price') }}
   - name: Total cost daily
     unique_id: hass_energy_total_cost_daily
+    default_entity_id: sensor.hass_energy_total_cost_daily
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -79,6 +85,7 @@ template:
       {{ has_value('sensor.hass_energy_monitored_cost_daily') and has_value('sensor.hass_energy_unmonitored_cost_daily') }}
   - name: Solar self-consumption daily
     unique_id: hass_energy_self_consumption_daily
+    default_entity_id: sensor.hass_energy_self_consumption_daily
     device_class: energy
     state_class: total
     unit_of_measurement: kWh
@@ -90,6 +97,7 @@ template:
       {{ has_value('sensor.hass_energy_grid_production_daily') and has_value('sensor.hass_energy_grid_export_daily') }}
   - name: House consumption monthly
     unique_id: hass_energy_house_energy_monthly
+    default_entity_id: sensor.hass_energy_house_energy_monthly
     device_class: energy
     state_class: total
     unit_of_measurement: kWh
@@ -102,6 +110,7 @@ template:
       {{ has_value('sensor.hass_energy_grid_import_monthly') and has_value('sensor.hass_energy_grid_export_monthly') and has_value('sensor.hass_energy_grid_production_monthly') }}
   - name: Monitored consumption monthly
     unique_id: hass_energy_monitored_energy_monthly
+    default_entity_id: sensor.hass_energy_monitored_energy_monthly
     device_class: energy
     state_class: total
     unit_of_measurement: kWh
@@ -116,6 +125,7 @@ template:
       {{ meters | map('states') | map('float', 0) | sum | round(3) }}
   - name: Unmonitored consumption monthly
     unique_id: hass_energy_unmonitored_energy_monthly
+    default_entity_id: sensor.hass_energy_unmonitored_energy_monthly
     device_class: energy
     state_class: total
     unit_of_measurement: kWh
@@ -127,6 +137,7 @@ template:
       {{ has_value('sensor.hass_energy_house_energy_monthly') and has_value('sensor.hass_energy_monitored_energy_monthly') }}
   - name: Monitored cost monthly
     unique_id: hass_energy_monitored_cost_monthly
+    default_entity_id: sensor.hass_energy_monitored_cost_monthly
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -140,6 +151,7 @@ template:
       {{ costs | map('states') | map('float', 0) | sum | round(2) }}
   - name: Unmonitored cost monthly
     unique_id: hass_energy_unmonitored_cost_monthly
+    default_entity_id: sensor.hass_energy_unmonitored_cost_monthly
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -150,6 +162,7 @@ template:
       {{ has_value('sensor.hass_energy_unmonitored_energy_monthly') and has_value('sensor.hass_energy_marginal_price') }}
   - name: Total cost monthly
     unique_id: hass_energy_total_cost_monthly
+    default_entity_id: sensor.hass_energy_total_cost_monthly
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -160,6 +173,7 @@ template:
       {{ has_value('sensor.hass_energy_monitored_cost_monthly') and has_value('sensor.hass_energy_unmonitored_cost_monthly') }}
   - name: Solar self-consumption monthly
     unique_id: hass_energy_self_consumption_monthly
+    default_entity_id: sensor.hass_energy_self_consumption_monthly
     device_class: energy
     state_class: total
     unit_of_measurement: kWh
@@ -171,6 +185,7 @@ template:
       {{ has_value('sensor.hass_energy_grid_production_monthly') and has_value('sensor.hass_energy_grid_export_monthly') }}
   - name: House consumption settlement period
     unique_id: hass_energy_house_energy_settlement
+    default_entity_id: sensor.hass_energy_house_energy_settlement
     device_class: energy
     state_class: total
     unit_of_measurement: kWh
@@ -183,6 +198,7 @@ template:
       {{ has_value('sensor.hass_energy_grid_import_settlement') and has_value('sensor.hass_energy_grid_export_settlement') and has_value('sensor.hass_energy_grid_production_settlement') }}
   - name: Monitored consumption settlement period
     unique_id: hass_energy_monitored_energy_settlement
+    default_entity_id: sensor.hass_energy_monitored_energy_settlement
     device_class: energy
     state_class: total
     unit_of_measurement: kWh
@@ -197,6 +213,7 @@ template:
       {{ meters | map('states') | map('float', 0) | sum | round(3) }}
   - name: Unmonitored consumption settlement period
     unique_id: hass_energy_unmonitored_energy_settlement
+    default_entity_id: sensor.hass_energy_unmonitored_energy_settlement
     device_class: energy
     state_class: total
     unit_of_measurement: kWh
@@ -208,6 +225,7 @@ template:
       {{ has_value('sensor.hass_energy_house_energy_settlement') and has_value('sensor.hass_energy_monitored_energy_settlement') }}
   - name: Monitored cost settlement period
     unique_id: hass_energy_monitored_cost_settlement
+    default_entity_id: sensor.hass_energy_monitored_cost_settlement
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -221,6 +239,7 @@ template:
       {{ costs | map('states') | map('float', 0) | sum | round(2) }}
   - name: Unmonitored cost settlement period
     unique_id: hass_energy_unmonitored_cost_settlement
+    default_entity_id: sensor.hass_energy_unmonitored_cost_settlement
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -231,6 +250,7 @@ template:
       {{ has_value('sensor.hass_energy_unmonitored_energy_settlement') and has_value('sensor.hass_energy_marginal_price') }}
   - name: Total cost settlement period
     unique_id: hass_energy_total_cost_settlement
+    default_entity_id: sensor.hass_energy_total_cost_settlement
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -241,6 +261,7 @@ template:
       {{ has_value('sensor.hass_energy_monitored_cost_settlement') and has_value('sensor.hass_energy_unmonitored_cost_settlement') }}
   - name: Solar self-consumption settlement period
     unique_id: hass_energy_self_consumption_settlement
+    default_entity_id: sensor.hass_energy_self_consumption_settlement
     device_class: energy
     state_class: total
     unit_of_measurement: kWh

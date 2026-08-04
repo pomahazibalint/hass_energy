@@ -21,12 +21,17 @@ Point it at your own configuration and write straight into Home Assistant:
 uv run hass-energy generate --config config.yaml --output /config/packages
 ```
 
-Then load the packages, once, in `configuration.yaml`:
+Then load the packages, once, in `configuration.yaml`, and restart:
 
 ```yaml
 homeassistant:
   packages: !include_dir_named packages
 ```
+
+The generated YAML uses `default_entity_id` on template sensors and the current
+automation syntax (`triggers:`/`conditions:`/`actions:`), so a recent Home
+Assistant is required. An older instance rejects the packages at startup with a
+configuration error rather than loading them incorrectly.
 
 ## Commands
 

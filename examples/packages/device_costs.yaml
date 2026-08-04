@@ -9,6 +9,7 @@ template:
 - sensor:
   - name: Heat pump cost daily
     unique_id: hass_energy_cost_heat_pump_daily
+    default_entity_id: sensor.hass_energy_cost_heat_pump_daily
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -22,6 +23,7 @@ template:
       category: heating
   - name: Heat pump cost monthly
     unique_id: hass_energy_cost_heat_pump_monthly
+    default_entity_id: sensor.hass_energy_cost_heat_pump_monthly
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -35,6 +37,7 @@ template:
       category: heating
   - name: Heat pump cost settlement period
     unique_id: hass_energy_cost_heat_pump_settlement
+    default_entity_id: sensor.hass_energy_cost_heat_pump_settlement
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -48,6 +51,7 @@ template:
       category: heating
   - name: Water heater cost daily
     unique_id: hass_energy_cost_water_heater_daily
+    default_entity_id: sensor.hass_energy_cost_water_heater_daily
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -61,6 +65,7 @@ template:
       category: heating
   - name: Water heater cost monthly
     unique_id: hass_energy_cost_water_heater_monthly
+    default_entity_id: sensor.hass_energy_cost_water_heater_monthly
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -74,6 +79,7 @@ template:
       category: heating
   - name: Water heater cost settlement period
     unique_id: hass_energy_cost_water_heater_settlement
+    default_entity_id: sensor.hass_energy_cost_water_heater_settlement
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -87,6 +93,7 @@ template:
       category: heating
   - name: EV charger cost daily
     unique_id: hass_energy_cost_ev_charger_daily
+    default_entity_id: sensor.hass_energy_cost_ev_charger_daily
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -100,6 +107,7 @@ template:
       category: transport
   - name: EV charger cost monthly
     unique_id: hass_energy_cost_ev_charger_monthly
+    default_entity_id: sensor.hass_energy_cost_ev_charger_monthly
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -113,6 +121,7 @@ template:
       category: transport
   - name: EV charger cost settlement period
     unique_id: hass_energy_cost_ev_charger_settlement
+    default_entity_id: sensor.hass_energy_cost_ev_charger_settlement
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -126,6 +135,7 @@ template:
       category: transport
   - name: Server cost daily
     unique_id: hass_energy_cost_server_daily
+    default_entity_id: sensor.hass_energy_cost_server_daily
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -139,6 +149,7 @@ template:
       category: always_on
   - name: Server cost monthly
     unique_id: hass_energy_cost_server_monthly
+    default_entity_id: sensor.hass_energy_cost_server_monthly
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -152,6 +163,7 @@ template:
       category: always_on
   - name: Server cost settlement period
     unique_id: hass_energy_cost_server_settlement
+    default_entity_id: sensor.hass_energy_cost_server_settlement
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -165,6 +177,7 @@ template:
       category: always_on
   - name: Washing machine cost daily
     unique_id: hass_energy_cost_washing_machine_daily
+    default_entity_id: sensor.hass_energy_cost_washing_machine_daily
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -178,6 +191,7 @@ template:
       category: appliance
   - name: Washing machine cost monthly
     unique_id: hass_energy_cost_washing_machine_monthly
+    default_entity_id: sensor.hass_energy_cost_washing_machine_monthly
     state_class: total
     unit_of_measurement: Ft
     state: |-
@@ -191,6 +205,7 @@ template:
       category: appliance
   - name: Washing machine cost settlement period
     unique_id: hass_energy_cost_washing_machine_settlement
+    default_entity_id: sensor.hass_energy_cost_washing_machine_settlement
     state_class: total
     unit_of_measurement: Ft
     state: |-

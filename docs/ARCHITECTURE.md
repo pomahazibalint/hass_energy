@@ -47,6 +47,15 @@ hand and a rename lands in one place.
 Every id is prefixed with the slugified `project_name`, which keeps a generated
 package from colliding with anything else in a Home Assistant instance.
 
+The two integrations pin entity ids differently, and both are pinned on
+purpose. A `utility_meter` takes its entity id from the object key it is
+configured under, so its `name` is free to be readable. A template sensor
+instead slugifies its `name`, which no other generated package could predict,
+so every generated template sensor sets `default_entity_id` to
+`sensor.<unique_id>`. `tests/test_generator.py` asserts that every entity a
+generated template reads is either a configured source sensor or an entity the
+generator itself creates.
+
 ## Determinism
 
 Identical configuration produces byte-identical files. Nothing carries a

@@ -80,7 +80,15 @@ def sensor(
 ) -> dict[str, Any]:
     """One entry of a Home Assistant template sensor package."""
 
-    entry: dict[str, Any] = {"name": name, "unique_id": unique_id}
+    # Home Assistant derives a template entity's id by slugifying its name, so
+    # a readable name would produce an id no other generated template could
+    # predict. default_entity_id pins the id to the unique id instead, which is
+    # what entities.py hands out, and leaves the name free to stay readable.
+    entry: dict[str, Any] = {
+        "name": name,
+        "unique_id": unique_id,
+        "default_entity_id": f"sensor.{unique_id}",
+    }
     if device_class is not None:
         entry["device_class"] = device_class
     entry["state_class"] = state_class

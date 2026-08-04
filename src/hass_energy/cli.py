@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .config import load_config
+from .loader import load_config
 
 
 def main() -> None:

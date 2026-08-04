@@ -34,6 +34,12 @@ meters:
   net_consumption: false
   delta_values: false
 
+diagnostics:
+  # These meters report every few minutes, so six hours of silence is a fault
+  # rather than a quiet day.
+  stale_after_hours: 6
+  unmonitored_warning_percent: 40
+
 devices:
   - id: heat_pump
     entity: sensor.heat_pump_energy

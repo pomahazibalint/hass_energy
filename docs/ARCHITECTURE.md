@@ -114,6 +114,28 @@ The next run diffs against it and reports anything that disappeared, along with
 how to migrate. A manifest that cannot be read is treated as absent: it exists
 to report renames and must never block a regeneration.
 
+## Diagnostics and projections
+
+Everything else in this project answers what the household used and what it
+cost. Two packages answer different questions.
+
+`diagnostics.yaml` asks whether the accounting is still true. A source sensor
+that vanishes, one that holds a plausible value but stopped updating, a tariff
+select left behind by a missed automation, or consumption no device accounts
+for all leave the cost sensors reporting confident, wrong numbers. Each is a
+`problem` binary sensor, so Home Assistant surfaces them without a dashboard.
+
+`projections.yaml` extrapolates the settlement period from the rate so far: the
+energy and cost it lands on, and the date the allowance runs out. The value of
+a banded tariff is knowing before the year ends whether the allowance will
+hold. It is a straight-line estimate, so it is least reliable early in the
+period and across a change of season. The exhaustion date reports unknown
+rather than a fabricated date when consumption is not on course to reach the
+limit at all.
+
+Both are prerequisites for the dashboards: an executive view needs the
+projection, and a diagnostics view needs the problem entities.
+
 ## Verifying against a running instance
 
 Nothing offline can tell whether `sensor.grid_import_energy` is a real entity or
@@ -125,3 +147,8 @@ Continuous integration goes the other way and validates the generated YAML
 against Home Assistant's own schemas with `hass --script check_config`. Note
 that command exits 0 even when it rejects a configuration, so the workflow
 inspects its output rather than its status.
+
+`check_config` compiles templates but never renders one, and a template that
+compiles can still fail on the first state it reads. `scripts/render_check.py`
+executes every generated template against a Home Assistant instance holding
+plausible states, and unlike `check_config` it exits non-zero on failure.

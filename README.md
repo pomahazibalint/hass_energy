@@ -84,6 +84,10 @@ meters:
   delta_values: false
   always_available: false
 
+diagnostics:
+  stale_after_hours: 6            # a source quiet this long counts as stopped
+  unmonitored_warning_percent: 40 # unattributed share worth looking at
+
 devices:
   - id: heat_pump
     entity: sensor.heat_pump_energy
@@ -109,6 +113,8 @@ Assistant does not backfill history — so seed the settlement meters with
 | `device_costs.yaml` | Per-device cost, exact per band over the settlement period |
 | `house_totals.yaml` | House consumption, monitored vs unmonitored energy and cost |
 | `settlement.yaml` | Automations resetting the settlement meters and following the price band |
+| `diagnostics.yaml` | Whether the accounting is still telling the truth |
+| `projections.yaml` | Where the settlement period lands at the current rate |
 
 Generated files carry a header saying so. They are artifacts: edit the
 configuration or the generator, never the output.

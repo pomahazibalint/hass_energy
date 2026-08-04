@@ -25,8 +25,8 @@ Build a generator-driven Home Assistant energy accounting system with Hungarian 
 - [x] Pricing
 - [x] Device costs
 - [x] House totals
-- [ ] Diagnostics
-- [ ] Projections
+- [x] Diagnostics
+- [x] Projections
 - [ ] Executive dashboard
 - [ ] Device dashboard
 - [ ] Solar dashboard
@@ -36,18 +36,21 @@ Build a generator-driven Home Assistant energy accounting system with Hungarian 
 - [ ] Release process
 
 ## Current state
-The generator produces five packages from a configuration: utility meters,
-banded pricing, device costs, house totals and the settlement automations.
-Device settlement meters carry the price bands as utility_meter tariffs, so
-settlement costs are exact rather than estimated at the current rate.
+The generator produces seven packages from a configuration: utility meters,
+banded pricing, device costs, house totals, the settlement automations,
+diagnostics and projections. Device settlement meters carry the price bands as
+utility_meter tariffs, so settlement costs are exact rather than estimated at
+the current rate.
 
-Continuous integration guards determinism with `generate --check`, and
-validates the generated YAML against Home Assistant's own schemas with
-`hass --script check_config`. `examples/` holds a configuration with its
-generated output committed beside it.
+Continuous integration guards determinism with `generate --check`, validates
+the generated YAML against Home Assistant's own schemas with
+`hass --script check_config`, and renders every generated template against a
+Home Assistant instance. `examples/` holds a configuration with its generated
+output committed beside it.
 
-Nothing is generated for dashboards yet. Diagnostics and projections are the
-natural next step, since both dashboards and alerting depend on them.
+Dashboards are the remaining feature work, and the entities they need now
+exist: the executive view reads the projections, the diagnostics view reads the
+problem entities.
 
 ## Ideas backlog
 - Tariff plugins

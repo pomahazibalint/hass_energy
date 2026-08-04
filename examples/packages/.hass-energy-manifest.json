@@ -75,6 +75,20 @@
     "sensor.hass_energy_monitored_cost_settlement",
     "sensor.hass_energy_unmonitored_cost_settlement",
     "sensor.hass_energy_total_cost_settlement",
-    "sensor.hass_energy_self_consumption_settlement"
+    "sensor.hass_energy_self_consumption_settlement",
+    "sensor.hass_energy_unmonitored_share_daily",
+    "sensor.hass_energy_unmonitored_share_monthly",
+    "sensor.hass_energy_unmonitored_share_settlement",
+    "binary_sensor.hass_energy_sources_unavailable",
+    "binary_sensor.hass_energy_sources_stale",
+    "binary_sensor.hass_energy_attribution_poor",
+    "binary_sensor.hass_energy_band_desync",
+    "sensor.hass_energy_settlement_days_elapsed",
+    "sensor.hass_energy_settlement_days_remaining",
+    "sensor.hass_energy_settlement_daily_rate",
+    "sensor.hass_energy_projected_settlement_energy",
+    "sensor.hass_energy_projected_settlement_cost",
+    "sensor.hass_energy_allowance_runs_out",
+    "binary_sensor.hass_energy_allowance_projected_exceeded"
   ]
 }

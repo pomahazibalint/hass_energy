@@ -58,7 +58,14 @@ Dashboards are the remaining feature work, and the entities they need now
 exist: the executive view reads the projections, the diagnostics view reads the
 problem entities.
 
+The integration's own record of energy is its weak point: it needs its own
+reset detection, glitch handling and correction action, and cannot apportion a
+price backdated into the period. [RECORDER_BACKED_SETTLEMENT.md](RECORDER_BACKED_SETTLEMENT.md)
+plans its replacement by the recorder's long-term statistics, with cost
+delivered to the energy dashboard as hourly statistics, and the migration path.
+
 ## Ideas backlog
+- Recorder-backed settlement, see docs/RECORDER_BACKED_SETTLEMENT.md
 - Tariff plugins
 - Battery support
 - Dynamic pricing

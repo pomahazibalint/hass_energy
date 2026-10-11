@@ -385,6 +385,26 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         await self._store.async_save(self.state.as_dict())
         self.refresh_settlement()
 
+    async def async_adjust(self, imported: float, exported: float, day: date | None = None) -> None:
+        """Correct what was recorded against the prices in force on a day.
+
+        The counterpart of the recorder's statistics adjustment, for the one
+        store the recorder does not reach. A glitch that slipped past the step
+        limit, or a reading mistyped into a seed, is taken out here rather
+        than by re-seeding the whole period from the invoice.
+        """
+
+        bucket = self._bucket(day)
+        if bucket.imported + imported < 0 or bucket.exported + exported < 0:
+            raise ValueError(
+                f"The price period holds {bucket.imported:.3f} kWh imported and "
+                f"{bucket.exported:.3f} kWh exported; it cannot go below zero."
+            )
+        bucket.imported += imported
+        bucket.exported += exported
+        await self._store.async_save(self.state.as_dict())
+        self.refresh_settlement()
+
     def _since(self, reading_date: date, day: date) -> dict[str, Bucket]:
         """The recorded energy that fell on or after a day, apportioned by day."""
 

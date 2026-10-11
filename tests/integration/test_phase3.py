@@ -4,12 +4,14 @@ from datetime import date
 
 import pytest
 from custom_components.hass_energy.const import (
+    ATTR_DAY,
     ATTR_EXPORTED_KWH,
     ATTR_IMPORTED_KWH,
     ATTR_PERIOD_END,
     ATTR_PERIOD_START,
     CONF_PRICES,
     DOMAIN,
+    SERVICE_ADJUST_ENERGY,
     SERVICE_IMPORT_INVOICE,
     SERVICE_SEED_PERIOD,
 )
@@ -19,6 +21,7 @@ from custom_components.hass_energy.issues import OVERDUE_AFTER_DAYS
 from custom_components.hass_energy.services import statistic_id
 from custom_components.hass_energy.settings import price_entry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -229,3 +232,46 @@ async def test_a_past_invoice_becomes_history(
 
     assert stats[stat_id]
     assert stats[stat_id][0]["state"] == 7000.0
+
+
+async def test_a_glitch_that_slipped_through_can_be_taken_out(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Developer tools cannot reach the integration's record; this can."""
+
+    hass.states.async_set(IMPORT_ENTITY, "24000.0")
+    await hass.async_block_till_done()
+    assert coordinator(entry).state.imported == 23000.0
+
+    await hass.services.async_call(
+        DOMAIN, SERVICE_ADJUST_ENERGY, {ATTR_IMPORTED_KWH: -22990.0}, blocking=True
+    )
+
+    assert coordinator(entry).state.imported == 10.0
+    assert coordinator(entry).data.readings.imported_kwh == 10.0
+
+
+async def test_an_adjustment_lands_in_the_price_period_of_its_day(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_ADJUST_ENERGY,
+        {ATTR_DAY: date(2025, 3, 1), ATTR_EXPORTED_KWH: 12.5},
+        blocking=True,
+    )
+
+    buckets = coordinator(entry).state.buckets
+    assert buckets["2024-01-01"].exported == 12.5
+    assert buckets["2024-01-01"].imported == 0.0
+
+
+async def test_an_adjustment_cannot_take_out_more_than_was_recorded(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    with pytest.raises(ServiceValidationError, match="cannot go below zero"):
+        await hass.services.async_call(
+            DOMAIN, SERVICE_ADJUST_ENERGY, {ATTR_IMPORTED_KWH: -1.0}, blocking=True
+        )
+
+    assert coordinator(entry).state.imported == 0.0

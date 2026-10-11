@@ -40,6 +40,9 @@ Installed part-way through a settlement period, run the **Seed the settlement
 period** action with the figures from your last invoice, or it will account
 from zero for a period that began months ago. Past invoices can be brought in
 with **Import a settled invoice**, which records them as long-term statistics.
+A reading that was wrong, such as an inverter reporting its lifetime total as
+one step, is taken out again with **Adjust recorded energy**; Developer tools
+cannot reach the integration's own record.
 
 For Home Assistant's energy dashboard, set the grid consumption and return
 sources to **use an entity tracking the total costs** and pick **Grid cost so

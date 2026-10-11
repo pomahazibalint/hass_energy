@@ -197,6 +197,12 @@ that began in September. The seeded energy is spread across the price periods
 it spanned by day, because the shape of energy nobody observed is unknowable;
 everything recorded afterwards is exact.
 
+What slips through is corrected with `adjust_recorded_energy`, which adds a
+signed quantity to one price period's bucket. It is the counterpart of the
+recorder's statistics adjustment for the one store the recorder does not
+reach: setting a source's state in Developer tools fires an ordinary reading,
+and adjusting its statistics changes nothing the integration reads.
+
 Past invoices go in through `import_invoice`, which writes them to the recorder
 as external statistics. Home Assistant never saw those years, so nothing else
 can supply them, and without it a fresh install has no history at all.

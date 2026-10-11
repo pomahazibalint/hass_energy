@@ -17,18 +17,21 @@ from homeassistant.components.recorder.statistics import (
 from homeassistant.components.recorder.util import get_instance  # type: ignore[attr-defined]
 from homeassistant.const import UnitOfEnergy
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.util import dt as dt_util
 from homeassistant.util import slugify
 
 from .billing import MeterReadings, SettlementPeriod, calculate
 from .const import (
+    ATTR_DAY,
     ATTR_EXPORTED_KWH,
     ATTR_IMPORTED_KWH,
     ATTR_PERIOD_END,
     ATTR_PERIOD_START,
     ATTR_READING_DATE,
     DOMAIN,
+    SERVICE_ADJUST_ENERGY,
     SERVICE_CLOSE_SETTLEMENT,
     SERVICE_IMPORT_INVOICE,
     SERVICE_SEED_PERIOD,
@@ -42,6 +45,14 @@ SEED_PERIOD_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_PERIOD_START): cv.date,
         vol.Required(ATTR_IMPORTED_KWH): vol.Coerce(float),
+        vol.Optional(ATTR_EXPORTED_KWH, default=0.0): vol.Coerce(float),
+    }
+)
+
+ADJUST_ENERGY_SCHEMA = vol.Schema(
+    {
+        vol.Optional(ATTR_DAY): cv.date,
+        vol.Optional(ATTR_IMPORTED_KWH, default=0.0): vol.Coerce(float),
         vol.Optional(ATTR_EXPORTED_KWH, default=0.0): vol.Coerce(float),
     }
 )
@@ -153,6 +164,17 @@ def register(hass: HomeAssistant) -> None:
     async def import_invoice(call: ServiceCall) -> None:
         await _import_invoice(hass, call)
 
+    async def adjust_energy(call: ServiceCall) -> None:
+        for coordinator in _coordinators(hass):
+            try:
+                await coordinator.async_adjust(
+                    float(call.data[ATTR_IMPORTED_KWH]),
+                    float(call.data[ATTR_EXPORTED_KWH]),
+                    call.data.get(ATTR_DAY),
+                )
+            except ValueError as err:
+                raise ServiceValidationError(str(err)) from err
+
     hass.services.async_register(
         DOMAIN, SERVICE_CLOSE_SETTLEMENT, close_settlement, schema=CLOSE_SETTLEMENT_SCHEMA
     )
@@ -161,4 +183,7 @@ def register(hass: HomeAssistant) -> None:
     )
     hass.services.async_register(
         DOMAIN, SERVICE_IMPORT_INVOICE, import_invoice, schema=IMPORT_INVOICE_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_ADJUST_ENERGY, adjust_energy, schema=ADJUST_ENERGY_SCHEMA
     )

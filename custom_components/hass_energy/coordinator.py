@@ -1,27 +1,34 @@
-"""Recording what the meters did, and deriving the settlement from it.
+"""Deriving the settlement from what the recorder knows the meters did.
 
-Only quantities are stored. Every figure with a currency on it is computed from
-those quantities and the current contract, so correcting a price or switching
-the allowance basis re-values history instead of contradicting it.
+Nothing about energy is stored here. The period is a start date over the
+recorder's hourly statistics for the import and export meters, so a backdated
+price applies to the hours after its date, an outlier is corrected where Home
+Assistant already offers to correct it, and closing a settlement is a date.
+The one thing kept is energy the recorder never saw: what a seed said the
+period held above what the statistics hold.
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
+from functools import partial
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
-from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
-from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.const import (
+    EVENT_RECORDER_HOURLY_STATISTICS_GENERATED,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
+)
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from . import issues
-from .billing import Bill, MeterReadings, Prices, SettlementPeriod, calculate
+from .billing import Bill, Hour, HourCost, Prices, SettlementPeriod, allocate
 from .const import (
     CONF_EXPORT_ENTITY,
     CONF_IMPORT_ENTITY,
@@ -29,96 +36,77 @@ from .const import (
     STORAGE_KEY,
     STORAGE_VERSION,
 )
-from .settings import (
-    max_step_kwh,
-    schedule_from_options,
-    standing_charge_months,
-    terms_from_options,
-)
+from .history import Observed, async_observe
+from .settings import schedule_from_options, standing_charge_months, terms_from_options
 
 _LOGGER = logging.getLogger(__name__)
-
-#: Written back this long after a reading, so a chatty meter does not turn into
-#: a chatty disk.
-SAVE_DELAY = 30
 
 #: Assumed length of a settlement period until a meter reading ends it. The two
 #: reference invoices ran 359 and 368 days, so this is a placeholder for the
 #: allowance to be earned against, never a prediction of the boundary.
 NOMINAL_PERIOD_DAYS = 365
 
-#: A reading below this fraction of the last one is a source that restarted its
-#: total. Anything closer is a glitch. The line is the one Home Assistant's own
-#: long-term statistics draw for a total_increasing sensor.
-RESTART_BELOW = 0.9
-
-
-@dataclass
-class Bucket:
-    """Energy recorded while one set of prices was in force."""
-
-    imported: float = 0.0
-    exported: float = 0.0
-
 
 @dataclass
 class PeriodState:
-    """Everything known about the settlement period in progress."""
+    """Everything the integration has to remember about the period in progress."""
 
     start: date
-    buckets: dict[str, Bucket] = field(default_factory=dict)
-    last_import: float | None = None
-    last_export: float | None = None
-    #: A reading held back as implausible, waiting for a second one to agree.
-    pending_import: float | None = None
-    pending_export: float | None = None
-
-    @property
-    def imported(self) -> float:
-        return sum(bucket.imported for bucket in self.buckets.values())
-
-    @property
-    def exported(self) -> float:
-        return sum(bucket.exported for bucket in self.buckets.values())
+    #: Energy the recorder never saw: what a seed said the period held above
+    #: what the statistics hold. Spread across the hours before the recorder's
+    #: history begins, because the shape of unobserved energy is unknowable.
+    unobserved_imported: float = 0.0
+    unobserved_exported: float = 0.0
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "period_start": self.start.isoformat(),
-            "last_import": self.last_import,
-            "last_export": self.last_export,
-            "pending_import": self.pending_import,
-            "pending_export": self.pending_export,
-            "buckets": {
-                key: {"imported": bucket.imported, "exported": bucket.exported}
-                for key, bucket in self.buckets.items()
-            },
+            "unobserved_imported": self.unobserved_imported,
+            "unobserved_exported": self.unobserved_exported,
         }
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> PeriodState:
         return cls(
             start=date.fromisoformat(raw["period_start"]),
-            buckets={
-                key: Bucket(float(value["imported"]), float(value["exported"]))
-                for key, value in (raw.get("buckets") or {}).items()
-            },
-            last_import=raw.get("last_import"),
-            last_export=raw.get("last_export"),
-            pending_import=raw.get("pending_import"),
-            pending_export=raw.get("pending_export"),
+            unobserved_imported=float(raw.get("unobserved_imported") or 0.0),
+            unobserved_exported=float(raw.get("unobserved_exported") or 0.0),
         )
 
 
+class SettlementStore(Store[dict[str, Any]]):
+    """The period state on disk, with the record it replaced migrated away."""
+
+    async def _async_migrate_func(
+        self, old_major_version: int, old_minor_version: int, old_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        if old_major_version == 1:
+            # Version 1 kept its own record of energy in buckets. Its totals
+            # are reconciled against the recorder on first load: whatever they
+            # hold above what the statistics hold is the unobserved remainder.
+            buckets = (old_data.get("buckets") or {}).values()
+            return {
+                "period_start": old_data["period_start"],
+                "reconcile": {
+                    "imported": sum(float(bucket["imported"]) for bucket in buckets),
+                    "exported": sum(float(bucket["exported"]) for bucket in buckets),
+                },
+            }
+        return old_data
+
+
 class SettlementCoordinator(DataUpdateCoordinator[Bill]):
-    """Accrues meter deltas and hands entities a freshly derived settlement."""
+    """Settles the period from the recorder's hourly statistics."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=None)
         self.entry = entry
-        self._store: Store[dict[str, Any]] = Store(
-            hass, STORAGE_VERSION, f"{STORAGE_KEY}.{entry.entry_id}"
-        )
+        self._store = SettlementStore(hass, STORAGE_VERSION, f"{STORAGE_KEY}.{entry.entry_id}")
         self.state = PeriodState(start=dt_util.now().date())
+        #: What the last refresh read and derived, for diagnostics and for
+        #: whatever publishes the hourly costs.
+        self.observed: Observed | None = None
+        self.costs: list[HourCost] = []
 
     @property
     def import_entity(self) -> str:
@@ -130,33 +118,101 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         return entity
 
     async def async_load(self) -> None:
-        """Restore recorded quantities and start watching the meters."""
+        """Restore the period and follow the recorder's hourly compile."""
 
         stored = await self._store.async_load()
+        reconcile = None
         if stored:
             self.state = PeriodState.from_dict(stored)
+            reconcile = stored.get("reconcile")
 
-        sources = [self.import_entity]
-        if self.export_entity:
-            sources.append(self.export_entity)
         self.entry.async_on_unload(
-            async_track_state_change_event(self.hass, sources, self._handle_source)
+            self.hass.bus.async_listen(EVENT_RECORDER_HOURLY_STATISTICS_GENERATED, self._hourly)
         )
-        self._seed_from_current_states()
-        self.refresh_settlement()
 
-    def _seed_from_current_states(self) -> None:
-        """Take the first reading without counting it as consumption.
+        if reconcile:
+            await self.async_seed(
+                self.state.start, float(reconcile["imported"]), float(reconcile["exported"])
+            )
+        else:
+            await self.async_refresh()
 
-        A meter's absolute value says nothing about what happened while Home
-        Assistant was not looking, so the first sighting only establishes a
-        baseline.
+    @callback
+    def _hourly(self, event: Event[Any]) -> None:
+        self.hass.async_create_task(self.async_request_refresh())
+
+    async def _async_update_data(self) -> Bill:
+        """Re-derive the settlement and re-check what could be wrong with it.
+
+        The checks run here rather than on a timer so they cannot describe a
+        state the integration has already moved on from.
         """
 
-        if self.state.last_import is None:
-            self.state.last_import = self._read(self.import_entity)
-        if self.export_entity and self.state.last_export is None:
-            self.state.last_export = self._read(self.export_entity)
+        covered = self.prices_cover_period()
+        issues.price_coverage(self.hass, self.entry.entry_id, covered, self.state.start)
+        issues.settlement_overdue(self.hass, self.entry.entry_id, self.days_elapsed())
+        issues.source_missing(self.hass, self.entry.entry_id, self.missing_sources())
+
+        observed = await self._observe()
+        self.observed = observed
+        issues.source_unrecorded(self.hass, self.entry.entry_id, observed.unrecorded)
+
+        if not covered:
+            # Every derived figure is unanswerable, which is not the same as
+            # zero, so the entities go unavailable rather than report a guess.
+            raise UpdateFailed(
+                f"No prices are known for {self.state.start}, when the settlement period began."
+            )
+
+        period = SettlementPeriod(self.state.start, self.period_end())
+        bill, self.costs = await self.hass.async_add_executor_job(
+            partial(
+                allocate,
+                period,
+                self._with_unobserved(observed),
+                schedule_from_options(self.entry.options),
+                terms_from_options(self.entry.options),
+                standing_charge_months=standing_charge_months(self.entry.options),
+                tz=dt_util.get_default_time_zone(),
+            )
+        )
+        return bill
+
+    async def _observe(self) -> Observed:
+        """The period's hours so far, as the recorder has them."""
+
+        start = dt_util.as_utc(dt_util.start_of_local_day(self.state.start))
+        end = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
+        return await async_observe(self.hass, self.import_entity, self.export_entity, start, end)
+
+    def _with_unobserved(self, observed: Observed) -> list[Hour]:
+        """Lay the unobserved remainder over the hours before the record begins.
+
+        With no hour before it, the remainder goes on the first hour there
+        is; with no hours at all, on the period's first hour.
+        """
+
+        state = self.state
+        if not (state.unobserved_imported or state.unobserved_exported):
+            return observed.hours
+
+        hours = list(observed.hours)
+        if not hours:
+            hours = [Hour(dt_util.as_utc(dt_util.start_of_local_day(state.start)))]
+        targets = [
+            i
+            for i, hour in enumerate(hours)
+            if observed.first is None or hour.start < observed.first
+        ] or [0]
+        imported = state.unobserved_imported / len(targets)
+        exported = state.unobserved_exported / len(targets)
+        for i in targets:
+            hours[i] = replace(
+                hours[i],
+                imported_kwh=hours[i].imported_kwh + imported,
+                exported_kwh=hours[i].exported_kwh + exported,
+            )
+        return hours
 
     def _read(self, entity_id: str) -> float | None:
         state = self.hass.states.get(entity_id)
@@ -167,37 +223,6 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         except ValueError:
             _LOGGER.debug("%s is not numeric: %s", entity_id, state.state)
             return None
-
-    @callback
-    def _handle_source(self, event: Event[EventStateChangedData]) -> None:
-        entity_id = event.data["entity_id"]
-        reading = self._read(entity_id)
-        if reading is None:
-            return
-
-        limit = max_step_kwh(self.entry.options)
-        state = self.state
-        if entity_id == self.import_entity:
-            delta, state.last_import, state.pending_import = movement(
-                state.last_import, reading, state.pending_import, limit
-            )
-            self._bucket().imported += delta
-        else:
-            delta, state.last_export, state.pending_export = movement(
-                state.last_export, reading, state.pending_export, limit
-            )
-            self._bucket().exported += delta
-
-        self._store.async_delay_save(self.state.as_dict, SAVE_DELAY)
-        self.refresh_settlement()
-
-    def _bucket(self, today: date | None = None) -> Bucket:
-        """The bucket for the prices in force today."""
-
-        day = today or dt_util.now().date()
-        schedule = schedule_from_options(self.entry.options)
-        key = schedule.at(max(day, schedule.entries[0].valid_from)).valid_from.isoformat()
-        return self.state.buckets.setdefault(key, Bucket())
 
     def days_elapsed(self, today: date | None = None) -> int:
         """How far into the settlement period we are."""
@@ -210,36 +235,14 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
 
         A nominal year rather than today, because the allowance is annual and
         prorating it to the days elapsed would report a household as over its
-        allowance a week into a period it will comfortably finish inside. The
-        real end arrives with the meter reading, through close_settlement.
+        allowance a week into a period it will comfortably finish inside. A
+        period that has run past the year stretches to cover today, so every
+        hour recorded has a price period to fall in. The real end arrives with
+        the meter reading, through close_settlement.
         """
 
-        return self.state.start + timedelta(days=NOMINAL_PERIOD_DAYS)
-
-    def refresh_settlement(self) -> None:
-        """Re-derive the settlement and re-check what could be wrong with it.
-
-        The checks run here rather than on a timer so they cannot describe a
-        state the integration has already moved on from.
-        """
-
-        covered = self.prices_cover_period()
-        issues.price_coverage(self.hass, self.entry.entry_id, covered, self.state.start)
-        issues.settlement_overdue(self.hass, self.entry.entry_id, self.days_elapsed())
-        issues.source_missing(self.hass, self.entry.entry_id, self.missing_sources())
-
-        if not covered:
-            # Every derived figure is unanswerable, which is not the same as
-            # zero, so the entities go unavailable rather than report a guess.
-            self.async_set_update_error(
-                UpdateFailed(
-                    f"No prices are known for {self.state.start}, "
-                    "when the settlement period began."
-                )
-            )
-            return
-
-        self.async_set_updated_data(self.build_bill())
+        day = today or dt_util.now().date()
+        return max(self.state.start + timedelta(days=NOMINAL_PERIOD_DAYS), day + timedelta(days=1))
 
     def missing_sources(self) -> list[str]:
         """Configured meters that are not currently reporting a number."""
@@ -285,191 +288,32 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         schedule = schedule_from_options(self.entry.options)
         return schedule.at(max(day, schedule.entries[0].valid_from))
 
-    def seed(
-        self, period_start: date, imported: float, exported: float, today: date | None = None
-    ) -> None:
+    async def async_seed(self, period_start: date, imported: float, exported: float) -> None:
         """Adopt a settlement period already under way.
 
-        Installed in March, the integration would otherwise account from zero
-        for a period that began in September. The quantities are spread across
-        the price periods elapsed by day, because the shape of energy nobody
-        observed is unknowable; everything recorded from here on is exact.
+        The figures are what the invoice and the meter say the period holds.
+        Whatever the recorder already has for it is not seeded twice: only the
+        part above the statistics is kept, and laid over the hours before the
+        recorder's history begins. If the sources were recorded all along,
+        there is nothing to keep and the period is simply read from history.
+        Recording what the meter did must not depend on being able to price
+        it, so missing prices are reported as a repair, not by refusing.
         """
 
-        day = today or dt_util.now().date()
-        schedule = schedule_from_options(self.entry.options)
-        # Recording what the meter did must not depend on being able to price
-        # it. A period starting before the schedule does is normal on a fresh
-        # install, where the only price so far is the one dated today; the
-        # missing prices are reported as a repair, not by refusing the figures.
-        window_start = max(period_start, schedule.entries[0].valid_from)
-        end = max(day, window_start + timedelta(days=1))
-        segments = schedule.segments(window_start, end)
-        days = sum(segment.days for segment in segments) or 1
-
-        # Built whole and adopted at the end, so a period that cannot be
-        # divided up leaves the previous one untouched rather than replacing it
-        # with nothing.
-        buckets = {
-            segment.prices.valid_from.isoformat(): Bucket(
-                imported=imported * segment.days / days,
-                exported=exported * segment.days / days,
-            )
-            for segment in segments
-        }
-        self.state = PeriodState(
-            start=period_start,
-            buckets=buckets,
-            last_import=self.state.last_import,
-            last_export=self.state.last_export,
-        )
-
-    def build_bill(self, today: date | None = None) -> Bill:
-        """Derive the settlement from what has been recorded so far."""
-
-        schedule = schedule_from_options(self.entry.options)
-        period = SettlementPeriod(self.state.start, self.period_end(today))
-        segments = schedule.segments(period.start, period.end)
-
-        imported: list[float] = []
-        exported: list[float] = []
-        for segment in segments:
-            bucket = self.state.buckets.get(segment.prices.valid_from.isoformat(), Bucket())
-            imported.append(bucket.imported)
-            exported.append(bucket.exported)
-
-        # Totals come from everything recorded, not from the buckets the
-        # current schedule happens to reach. Editing prices changes which
-        # buckets a segment claims, and energy must not disappear from the bill
-        # because a price boundary moved. The per-segment figures are only the
-        # shape of the apportionment; the engine nets and scales them, so the
-        # settlement mode is its concern and not repeated here.
-        readings = MeterReadings(self.state.imported, self.state.exported)
-
-        return calculate(
-            period,
-            readings,
-            schedule,
-            terms_from_options(self.entry.options),
-            standing_charge_months=standing_charge_months(self.entry.options),
-            consumption_by_segment=imported,
-            feed_in_by_segment=exported,
-        )
-
-    async def async_shutdown(self) -> None:
-        """Flush pending quantities.
-
-        A delayed save is lost if the entry reloads before it fires, and losing
-        half a minute of accrual to a restart would be a silent error.
-        """
-
+        self.state = PeriodState(start=period_start)
+        observed = await self._observe()
+        self.state.unobserved_imported = max(imported - observed.imported_kwh, 0.0)
+        self.state.unobserved_exported = max(exported - observed.exported_kwh, 0.0)
         await self._store.async_save(self.state.as_dict())
+        await self.async_refresh()
 
-    async def async_close_settlement(self, reading_date: date, today: date | None = None) -> None:
+    async def async_close_settlement(self, reading_date: date) -> None:
         """Start a new settlement period on the day the meter was read.
 
-        The reading is usually entered some days after it happened, and what
-        the meters did in between belongs to the period that follows it. The
-        buckets do not know which day their energy fell on, so each one's share
-        of the days since the reading carries over — the same by-day split that
-        seeding uses for energy nobody watched.
+        The hours since the reading are in the recorder, whenever the reading
+        is entered, so nothing is carried over by hand and nothing is lost.
         """
 
-        day = today or dt_util.now().date()
-        self.state = PeriodState(
-            start=reading_date,
-            buckets=self._since(reading_date, day),
-            last_import=self.state.last_import,
-            last_export=self.state.last_export,
-        )
+        self.state = PeriodState(start=reading_date)
         await self._store.async_save(self.state.as_dict())
-        self.refresh_settlement()
-
-    async def async_adjust(self, imported: float, exported: float, day: date | None = None) -> None:
-        """Correct what was recorded against the prices in force on a day.
-
-        The counterpart of the recorder's statistics adjustment, for the one
-        store the recorder does not reach. A glitch that slipped past the step
-        limit, or a reading mistyped into a seed, is taken out here rather
-        than by re-seeding the whole period from the invoice.
-        """
-
-        bucket = self._bucket(day)
-        if bucket.imported + imported < 0 or bucket.exported + exported < 0:
-            raise ValueError(
-                f"The price period holds {bucket.imported:.3f} kWh imported and "
-                f"{bucket.exported:.3f} kWh exported; it cannot go below zero."
-            )
-        bucket.imported += imported
-        bucket.exported += exported
-        await self._store.async_save(self.state.as_dict())
-        self.refresh_settlement()
-
-    def _since(self, reading_date: date, day: date) -> dict[str, Bucket]:
-        """The recorded energy that fell on or after a day, apportioned by day."""
-
-        if reading_date >= day:
-            return {}
-        if reading_date <= self.state.start:
-            return {key: Bucket(b.imported, b.exported) for key, b in self.state.buckets.items()}
-
-        # The days each bucket spans. Energy from before the schedule began was
-        # recorded against its first price, so that bucket runs from the start
-        # of the period rather than from the price's own date.
-        schedule = schedule_from_options(self.entry.options)
-        window_start = max(self.state.start, schedule.entries[0].valid_from)
-        spans: dict[str, tuple[date, date]] = {}
-        if window_start < day:
-            for segment in schedule.segments(window_start, day):
-                spans[segment.prices.valid_from.isoformat()] = (segment.start, segment.end)
-            first = min(spans, key=lambda key: spans[key][0])
-            spans[first] = (self.state.start, spans[first][1])
-
-        carried: dict[str, Bucket] = {}
-        for key, bucket in self.state.buckets.items():
-            # A bucket no segment claims, left by a removed price, is treated as
-            # spanning the whole period: its energy has nowhere better to go.
-            start, end = spans.get(key, (self.state.start, day))
-            after = max((end - max(start, reading_date)).days, 0)
-            share = after / (end - start).days if end > start else 0.0
-            if share:
-                carried[key] = Bucket(bucket.imported * share, bucket.exported * share)
-        return carried
-
-
-def movement(
-    previous: float | None, reading: float, pending: float | None, limit: float
-) -> tuple[float, float | None, float | None]:
-    """How much a meter moved, where its baseline now stands, and what is held.
-
-    A reading far below the last one means the source restarted its total, so
-    the reading itself is the movement. A reading only slightly below it is a
-    glitch — a reconnect replaying a stale value, a wobble in the last digit —
-    and is ignored, baseline and all.
-
-    A movement larger than ``limit`` in either direction is not believed on
-    its own. Inverters are known to report their lifetime total as a single
-    step, usually when powering on or off, and sometimes to revert just as
-    suddenly; counted, that would add years of energy to the period, and the
-    delayed save would make it permanent. The baseline is held instead and the
-    reading remembered. If the next reading agrees with it, the new level is
-    real and becomes the baseline without the jump being counted; if the
-    source has already come back, the baseline was never disturbed. A limit of
-    zero or below disables the check.
-    """
-
-    if previous is None:
-        return 0.0, reading, None
-
-    if reading >= previous:
-        step = reading - previous
-        if limit <= 0 or step <= limit:
-            return step, reading, None
-    elif reading >= previous * RESTART_BELOW:
-        return 0.0, previous, None
-    elif limit <= 0 or reading <= limit:
-        return reading, reading, None
-
-    if pending is not None and abs(reading - pending) <= limit:
-        return 0.0, reading, None
-    return 0.0, previous, reading
+        await self.async_refresh()

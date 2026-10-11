@@ -6,6 +6,7 @@ settlement period, in the order they would do it.
 
 from datetime import date, timedelta
 
+import pytest
 from custom_components.hass_energy.const import (
     ATTR_EXPORTED_KWH,
     ATTR_IMPORTED_KWH,
@@ -19,14 +20,16 @@ from custom_components.hass_energy.const import (
     DOMAIN,
     SERVICE_SEED_PERIOD,
 )
+from freezegun.api import FrozenDateTimeFactory
+from homeassistant.components.recorder import Recorder
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
 
-from .conftest import EXPORT_ENTITY, IMPORT_ENTITY
+from .conftest import EXPORT_ENTITY, IMPORT_ENTITY, TODAY
 
 PREFIX = "sensor.vag_meter_"
-LAST_SEPTEMBER = date.today().replace(month=9, day=13) - timedelta(days=365)
+LAST_SEPTEMBER = TODAY.replace(month=9, day=13) - timedelta(days=365)
 
 
 async def install(hass: HomeAssistant) -> str:
@@ -34,9 +37,7 @@ async def install(hass: HomeAssistant) -> str:
 
     hass.states.async_set(IMPORT_ENTITY, "1000.0")
     hass.states.async_set(EXPORT_ENTITY, "2000.0")
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": SOURCE_USER}
-    )
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
     created = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
@@ -83,7 +84,10 @@ async def seed(hass: HomeAssistant, start: date, imported: float, exported: floa
 
 
 async def test_backdate_the_price_then_seed(
-    enable_custom_integrations: None, hass: HomeAssistant
+    recorder_mock: Recorder,
+    enable_custom_integrations: None,
+    frozen: FrozenDateTimeFactory,
+    hass: HomeAssistant,
 ) -> None:
     """The order the instructions imply: fix prices first, then seed."""
 
@@ -93,7 +97,7 @@ async def test_backdate_the_price_then_seed(
 
     coordinator = hass.config_entries.async_get_entry(entry_id).runtime_data  # type: ignore[union-attr]
     assert coordinator.state.start == LAST_SEPTEMBER
-    assert coordinator.state.imported == 4000.0
+    assert coordinator.data.readings.imported_kwh == pytest.approx(4000.0)
 
     billed = hass.states.get(PREFIX + "billed_energy")
     assert billed is not None
@@ -101,7 +105,10 @@ async def test_backdate_the_price_then_seed(
 
 
 async def test_seed_first_then_backdate_the_price(
-    enable_custom_integrations: None, hass: HomeAssistant
+    recorder_mock: Recorder,
+    enable_custom_integrations: None,
+    frozen: FrozenDateTimeFactory,
+    hass: HomeAssistant,
 ) -> None:
     """The order someone actually does it: seed, discover it is unpriced, fix."""
 
@@ -121,29 +128,25 @@ async def test_seed_first_then_backdate_the_price(
 
 
 async def test_seeded_energy_survives_the_price_schedule_changing(
-    enable_custom_integrations: None, hass: HomeAssistant
+    recorder_mock: Recorder,
+    enable_custom_integrations: None,
+    frozen: FrozenDateTimeFactory,
+    hass: HomeAssistant,
 ) -> None:
-    """Editing prices must not lose recorded energy.
-
-    Buckets are keyed by the price period the energy fell in, so moving a
-    boundary changes which buckets a segment claims. The totals have to come
-    from everything recorded, or energy silently drops out of the bill.
-    """
+    """Editing prices must not lose energy: the hours are what they are."""
 
     midway = LAST_SEPTEMBER + timedelta(days=120)
 
     entry_id = await install(hass)
     await backdate_price(hass, entry_id, LAST_SEPTEMBER)
     await backdate_price(hass, entry_id, midway)
-    # Seeding spreads the energy across both price periods, so the later
-    # bucket holds most of it.
     await seed(hass, LAST_SEPTEMBER, imported=4000.0, exported=3500.0)
 
     entry = hass.config_entries.async_get_entry(entry_id)
     assert entry is not None
-    assert entry.runtime_data.state.buckets[midway.isoformat()].imported > 2000
+    # Three price periods: the two backdated ones and the default dated today.
+    assert len(entry.runtime_data.data.subsidized) == 3
 
-    # Removing that price leaves no segment keyed to its bucket.
     result = await hass.config_entries.options.async_init(entry_id)
     form = await hass.config_entries.options.async_configure(
         result["flow_id"], {"next_step_id": "remove_price"}
@@ -154,13 +157,17 @@ async def test_seeded_energy_survives_the_price_schedule_changing(
     await hass.async_block_till_done()
 
     bill = entry.runtime_data.data
-    assert bill.readings.imported_kwh == 4000.0
-    assert bill.readings.exported_kwh == 3500.0
-    assert bill.billed_kwh == 500.0
+    assert bill.readings.imported_kwh == pytest.approx(4000.0)
+    assert bill.readings.exported_kwh == pytest.approx(3500.0)
+    assert bill.billed_kwh == pytest.approx(500.0)
+    assert len(bill.subsidized) == 2
 
 
 async def test_the_money_follows_the_seeded_energy(
-    enable_custom_integrations: None, hass: HomeAssistant
+    recorder_mock: Recorder,
+    enable_custom_integrations: None,
+    frozen: FrozenDateTimeFactory,
+    hass: HomeAssistant,
 ) -> None:
     entry_id = await install(hass)
     await backdate_price(hass, entry_id, LAST_SEPTEMBER)

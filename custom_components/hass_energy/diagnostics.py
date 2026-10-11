@@ -39,6 +39,18 @@ async def async_get_config_entry_diagnostics(
             "net_position": bill.net_position,
         }
 
+    observed: dict[str, Any] | None = None
+    if coordinator.observed is not None:
+        observed = {
+            "hours": len(coordinator.observed.hours),
+            "first": (
+                coordinator.observed.first.isoformat() if coordinator.observed.first else None
+            ),
+            "imported_kwh": coordinator.observed.imported_kwh,
+            "exported_kwh": coordinator.observed.exported_kwh,
+            "unrecorded": coordinator.observed.unrecorded,
+        }
+
     return {
         # Entity ids are the user's own naming, so they are reported as
         # configured rather than redacted into uselessness.
@@ -48,7 +60,8 @@ async def async_get_config_entry_diagnostics(
             "missing": coordinator.missing_sources(),
             "max_step_kwh": max_step_kwh(entry.options),
         },
-        "recorded": coordinator.state.as_dict(),
+        "period": coordinator.state.as_dict(),
+        "observed": observed,
         "days_elapsed": coordinator.days_elapsed(),
         "prices_cover_period": coordinator.prices_cover_period(),
         "terms": {

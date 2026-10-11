@@ -3,27 +3,51 @@
 These need Home Assistant installed, which the pure billing and generator tests
 do not. They live apart so the rest of the suite stays fast and runnable on any
 supported Python.
+
+The settlement is read from the recorder's long-term statistics, so the tests
+put hours into the recorder directly rather than moving sensor states, and run
+on a frozen clock so that "today" and the hours before it are known.
 """
 
-from collections.abc import Generator
-from datetime import date
+from collections.abc import AsyncGenerator, Sequence
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pytest
 from custom_components.hass_energy.const import (
     CONF_EXPORT_ENTITY,
     CONF_IMPORT_ENTITY,
-    CONF_MAX_STEP_KWH,
     CONF_PRICES,
     DOMAIN,
 )
+from custom_components.hass_energy.coordinator import SettlementCoordinator
 from custom_components.hass_energy.settings import price_entry
+from freezegun.api import FrozenDateTimeFactory
+from homeassistant.components.recorder import Recorder
+from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
+from homeassistant.components.recorder.models.statistics import StatisticMeanType
+from homeassistant.components.recorder.statistics import async_import_statistics
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.components.recorder.common import (
+    async_wait_recording_done,
+)
 
 IMPORT_ENTITY = "sensor.grid_import_energy"
 EXPORT_ENTITY = "sensor.grid_export_energy"
+
+#: The test instance runs on US/Pacific. 20:00 UTC is 13:00 local, so the
+#: local day began at 07:00 UTC and thirteen complete hours of it exist.
+NOW = datetime(2026, 10, 11, 20, 0, tzinfo=UTC)
+TODAY = date(2026, 10, 11)
+DAY_START = datetime(2026, 10, 11, 7, 0, tzinfo=UTC)
+
+
+def local_midnight(day: date) -> datetime:
+    """The UTC instant a local day began, on the test instance's clock."""
+
+    return DAY_START + timedelta(days=(day - TODAY).days)
 
 
 @pytest.fixture
@@ -37,12 +61,20 @@ def prices() -> list[dict[str, Any]]:
 
 
 @pytest.fixture
+def frozen(freezer: FrozenDateTimeFactory) -> FrozenDateTimeFactory:
+    freezer.move_to(NOW)
+    return freezer
+
+
+@pytest.fixture
 async def entry(
+    recorder_mock: Recorder,
     enable_custom_integrations: None,
+    frozen: FrozenDateTimeFactory,
     hass: HomeAssistant,
     prices: list[dict[str, Any]],
-) -> Generator[MockConfigEntry, None, None]:
-    """A configured metering point with both meters present."""
+) -> AsyncGenerator[MockConfigEntry]:
+    """A configured metering point with both meters present and a recorder."""
 
     hass.states.async_set(IMPORT_ENTITY, "1000.0")
     hass.states.async_set(EXPORT_ENTITY, "2000.0")
@@ -52,11 +84,55 @@ async def entry(
         domain=DOMAIN,
         title="Test settlement",
         data={CONF_IMPORT_ENTITY: IMPORT_ENTITY, CONF_EXPORT_ENTITY: EXPORT_ENTITY},
-        # The tests move a meter by a whole invoice in one step, which the
-        # glitch guard would otherwise hold back. Its own tests set the limit.
-        options={CONF_PRICES: prices, CONF_MAX_STEP_KWH: 100000.0},
+        options={CONF_PRICES: prices},
     )
     config_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     yield config_entry
+
+
+def coordinator(entry: MockConfigEntry) -> SettlementCoordinator:
+    data: SettlementCoordinator = entry.runtime_data
+    return data
+
+
+async def record(
+    hass: HomeAssistant, entity_id: str, start: datetime, kwh_per_hour: Sequence[float]
+) -> None:
+    """Put hourly energy for a source into the recorder's long-term statistics.
+
+    ``start`` is the first hour's UTC start; each quantity is one hour's kWh.
+    The recorder derives an hour's change from consecutive sums, so every call
+    rewrites the source's whole series with the sums recomputed in time order,
+    which lets a test record hours in any order.
+    """
+
+    recorded: dict[str, dict[datetime, float]] = hass.data.setdefault("_test_recorded", {})
+    series = recorded.setdefault(entity_id, {})
+    for i, kwh in enumerate(kwh_per_hour):
+        series[start + timedelta(hours=i)] = kwh
+
+    metadata = StatisticMetaData(
+        mean_type=StatisticMeanType.NONE,
+        has_sum=True,
+        name=None,
+        source="recorder",
+        statistic_id=entity_id,
+        unit_class="energy",
+        unit_of_measurement="kWh",
+    )
+    running = 0.0
+    rows: list[StatisticData] = []
+    for hour in sorted(series):
+        running += series[hour]
+        rows.append(StatisticData(start=hour, state=running, sum=running))
+    async_import_statistics(hass, metadata, rows)
+    await async_wait_recording_done(hass)
+
+
+async def refresh(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    """Re-derive the settlement, as the recorder's hourly compile would."""
+
+    await coordinator(entry).async_refresh()
+    await hass.async_block_till_done()

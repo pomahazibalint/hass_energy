@@ -1,6 +1,7 @@
 from datetime import date
 from typing import Any
 
+import pytest
 from custom_components.hass_energy.const import (
     CONF_ALLOWANCE_BASIS,
     CONF_EXPORT_ENTITY,
@@ -12,6 +13,7 @@ from custom_components.hass_energy.const import (
     CONF_VALID_FROM,
     DOMAIN,
 )
+from homeassistant.components.recorder import Recorder
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
@@ -19,6 +21,11 @@ from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from .conftest import EXPORT_ENTITY, IMPORT_ENTITY
+
+
+@pytest.fixture(autouse=True)
+def _recorder(recorder_mock: Recorder) -> None:
+    """The integration depends on the recorder, so setting an entry up needs one."""
 
 
 async def test_setup_only_asks_for_the_meters(
@@ -73,7 +80,7 @@ async def options(hass: HomeAssistant, entry: MockConfigEntry, step: str) -> Any
 
 
 async def test_a_price_change_is_recorded_from_the_chosen_day(
-    hass: HomeAssistant, entry: MockConfigEntry
+    entry: MockConfigEntry, hass: HomeAssistant
 ) -> None:
     form = await options(hass, entry, "prices")
 
@@ -93,7 +100,7 @@ async def test_a_price_change_is_recorded_from_the_chosen_day(
 
 
 async def test_backdating_a_price_is_the_same_form(
-    hass: HomeAssistant, entry: MockConfigEntry
+    entry: MockConfigEntry, hass: HomeAssistant
 ) -> None:
     """A correction noticed late is a date, not a separate mechanism."""
 
@@ -114,7 +121,7 @@ async def test_backdating_a_price_is_the_same_form(
 
 
 async def test_submitting_the_same_day_twice_replaces_it(
-    hass: HomeAssistant, entry: MockConfigEntry
+    entry: MockConfigEntry, hass: HomeAssistant
 ) -> None:
     form = await options(hass, entry, "prices")
     await hass.config_entries.options.async_configure(
@@ -133,7 +140,7 @@ async def test_submitting_the_same_day_twice_replaces_it(
 
 
 async def test_the_price_form_is_prefilled_with_what_is_in_force(
-    hass: HomeAssistant, entry: MockConfigEntry
+    entry: MockConfigEntry, hass: HomeAssistant
 ) -> None:
     form = await options(hass, entry, "prices")
 
@@ -145,7 +152,7 @@ async def test_the_price_form_is_prefilled_with_what_is_in_force(
 
 
 async def test_a_price_change_can_be_removed(
-    hass: HomeAssistant, entry: MockConfigEntry
+    entry: MockConfigEntry, hass: HomeAssistant
 ) -> None:
     form = await options(hass, entry, "remove_price")
 
@@ -178,7 +185,7 @@ async def test_removal_is_hidden_with_a_single_price(
 
 
 async def test_the_allowance_basis_is_switchable(
-    hass: HomeAssistant, entry: MockConfigEntry
+    entry: MockConfigEntry, hass: HomeAssistant
 ) -> None:
     """The question the invoices could not settle is a dropdown, not a rebuild."""
 

@@ -1,3 +1,5 @@
+"""The settlement as entities."""
+
 from datetime import date, timedelta
 
 from custom_components.hass_energy.const import (
@@ -6,19 +8,24 @@ from custom_components.hass_energy.const import (
     DOMAIN,
     SERVICE_CLOSE_SETTLEMENT,
 )
-from custom_components.hass_energy.coordinator import Bucket, PeriodState
 from custom_components.hass_energy.settings import price_entry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from .conftest import EXPORT_ENTITY, IMPORT_ENTITY
+from .conftest import DAY_START, EXPORT_ENTITY, IMPORT_ENTITY, TODAY, coordinator, record, refresh
 
 PREFIX = "sensor.test_settlement_"
 
 
+def state_of(hass: HomeAssistant, key: str) -> str:
+    state = hass.states.get(PREFIX + key)
+    assert state is not None, key
+    return state.state
+
+
 async def test_every_line_of_the_settlement_is_an_entity(
-    hass: HomeAssistant, entry: MockConfigEntry
+    entry: MockConfigEntry, hass: HomeAssistant
 ) -> None:
     for key in (
         "billed_energy",
@@ -42,7 +49,7 @@ async def test_every_line_of_the_settlement_is_an_entity(
 
 
 async def test_money_takes_its_unit_from_the_contract(
-    hass: HomeAssistant, entry: MockConfigEntry
+    entry: MockConfigEntry, hass: HomeAssistant
 ) -> None:
     payable = hass.states.get(PREFIX + "total_payable")
 
@@ -51,72 +58,70 @@ async def test_money_takes_its_unit_from_the_contract(
 
 
 async def test_a_silent_meter_still_owes_the_standing_charge(
-    hass: HomeAssistant, entry: MockConfigEntry
+    entry: MockConfigEntry, hass: HomeAssistant
 ) -> None:
-    assert float(hass.states.get(PREFIX + "energy_cost").state) == 0.0  # type: ignore[union-attr]
-    assert hass.states.get(PREFIX + "total_payable").state == "1836"  # type: ignore[union-attr]
+    assert float(state_of(hass, "energy_cost")) == 0.0
+    assert state_of(hass, "total_payable") == "1836"
 
 
 async def test_a_whole_settlement_through_the_integration(
-    hass: HomeAssistant, entry: MockConfigEntry
+    entry: MockConfigEntry, hass: HomeAssistant
 ) -> None:
-    """A whole settlement end to end: quantities in, itemised bill out.
+    """A whole settlement end to end: hours in, itemised bill out.
 
-    The engine is checked against this invoice directly elsewhere. This checks
+    The engine is checked against the invoice directly elsewhere. This checks
     that the integration feeds it the right things and publishes the result.
     """
 
-    coordinator = entry.runtime_data
-    # The invoice's prices, and its 1 August price-period boundary.
     hass.config_entries.async_update_entry(
         entry,
         options={
             **entry.options,
             CONF_PRICES: [
                 price_entry(date(2024, 1, 1), 36.386, 70.104, 5.11),
-                price_entry(date(2025, 8, 1), 36.386, 70.104, 5.11),
+                price_entry(TODAY - timedelta(days=1), 36.386, 70.104, 5.11),
             ],
         },
     )
-    # 7 000 kWh withdrawn, 7 500 fed in, recorded against the price period
-    # each happened in.
-    coordinator.state = PeriodState(
-        start=date(2024, 9, 9),
-        buckets={
-            "2024-01-01": Bucket(imported=6300.0, exported=6750.0),
-            "2025-08-01": Bucket(imported=700.0, exported=750.0),
-        },
-        last_import=23000.0,
-        last_export=26500.0,
-    )
-    coordinator.async_set_updated_data(coordinator.build_bill())
     await hass.async_block_till_done()
+    await coordinator(entry).async_close_settlement(TODAY - timedelta(days=3))
+    # 7 000 kWh withdrawn, 7 500 fed in, with the last day under a new price
+    # period: the invoice's shape, scaled to a few days.
+    two_days_ago = DAY_START - timedelta(days=2)
+    yesterday = DAY_START - timedelta(days=1)
+    await record(hass, IMPORT_ENTITY, two_days_ago, [6300.0])
+    await record(hass, EXPORT_ENTITY, two_days_ago, [6750.0])
+    await record(hass, IMPORT_ENTITY, yesterday, [700.0])
+    await record(hass, EXPORT_ENTITY, yesterday, [750.0])
+    await refresh(hass, entry)
 
-    bill = coordinator.data
+    bill = coordinator(entry).data
     assert bill.readings.imported_kwh == 7000.0
     assert bill.readings.exported_kwh == 7500.0
     assert bill.billed_kwh == 0
     assert bill.surplus_kwh == 500.0
     assert bill.gross_total == 1836
+    # Each price period's surplus rounded on its own: 450 and 50 kWh at 5.11.
+    assert [line.rounded for line in bill.surplus] == [2300, 256]
     assert bill.surplus_net == 2556
 
-    assert hass.states.get(PREFIX + "total_payable").state == "1836"  # type: ignore[union-attr]
-    assert hass.states.get(PREFIX + "surplus_owed").state == "2556"  # type: ignore[union-attr]
-    assert hass.states.get(PREFIX + "net_position").state == "-720"  # type: ignore[union-attr]
+    assert state_of(hass, "total_payable") == "1836"
+    assert state_of(hass, "surplus_owed") == "2556"
+    assert state_of(hass, "net_position") == "-720"
 
 
 async def test_the_payable_line_carries_the_period_it_covers(
-    hass: HomeAssistant, entry: MockConfigEntry
+    entry: MockConfigEntry, hass: HomeAssistant
 ) -> None:
     attributes = hass.states.get(PREFIX + "total_payable").attributes  # type: ignore[union-attr]
 
-    assert "period_start" in attributes
+    assert attributes["period_start"] == TODAY.isoformat()
     assert "days_elapsed" in attributes
     assert "imported_kwh" in attributes
 
 
 async def test_the_feed_in_price_is_the_rate_in_force_per_kwh(
-    hass: HomeAssistant, entry: MockConfigEntry
+    entry: MockConfigEntry, hass: HomeAssistant
 ) -> None:
     """A price for the energy dashboard's return-to-grid option, not a bill."""
 
@@ -128,23 +133,18 @@ async def test_the_feed_in_price_is_the_rate_in_force_per_kwh(
 
 
 async def test_the_feed_in_price_follows_a_price_change(
-    hass: HomeAssistant, entry: MockConfigEntry
+    entry: MockConfigEntry, hass: HomeAssistant
 ) -> None:
     prices = [*entry.options[CONF_PRICES]]
     prices[-1] = {**prices[-1], "feed_in": 7.5}
     hass.config_entries.async_update_entry(entry, options={**entry.options, CONF_PRICES: prices})
     await hass.async_block_till_done()
 
-    assert float(hass.states.get(PREFIX + "current_feed_in_price").state) == 7.5  # type: ignore[union-attr]
-
-
-async def move(hass: HomeAssistant, entity: str, value: float) -> None:
-    hass.states.async_set(entity, str(value))
-    await hass.async_block_till_done()
+    assert float(state_of(hass, "current_feed_in_price")) == 7.5
 
 
 async def test_the_running_totals_speak_the_dashboards_currency(
-    hass: HomeAssistant, entry: MockConfigEntry
+    entry: MockConfigEntry, hass: HomeAssistant
 ) -> None:
     """The energy dashboard labels costs in Home Assistant's currency, not the contract's."""
 
@@ -154,53 +154,51 @@ async def test_the_running_totals_speak_the_dashboards_currency(
         assert state.attributes["unit_of_measurement"] == hass.config.currency
         assert state.attributes["device_class"] == "monetary"
         assert state.attributes["state_class"] == "total"
-        assert state.attributes["last_reset"] == dt_util.start_of_local_day(
-            entry.runtime_data.state.start
-        ).isoformat()
+        assert state.attributes["last_reset"] == dt_util.start_of_local_day(TODAY).isoformat()
 
 
 async def test_the_grid_cost_is_the_energy_charge_with_vat(
-    hass: HomeAssistant, entry: MockConfigEntry
+    entry: MockConfigEntry, hass: HomeAssistant
 ) -> None:
-    await move(hass, IMPORT_ENTITY, 1500.0)
+    await record(hass, IMPORT_ENTITY, DAY_START, [500.0])
+    await refresh(hass, entry)
 
     # 500 kWh at the subsidized rate of 40, with 27% VAT on it.
-    assert float(hass.states.get(PREFIX + "grid_cost_so_far").state) == 25400.0  # type: ignore[union-attr]
-    assert hass.states.get(PREFIX + "export_compensation_so_far").state == "0"  # type: ignore[union-attr]
+    assert float(state_of(hass, "grid_cost_so_far")) == 25400.0
+    assert state_of(hass, "export_compensation_so_far") == "0"
 
 
 async def test_export_that_cancels_import_takes_the_cost_back_down(
-    hass: HomeAssistant, entry: MockConfigEntry
+    entry: MockConfigEntry, hass: HomeAssistant
 ) -> None:
     """An hour of export under szaldó is a negative cost, not a compensation."""
 
-    await move(hass, IMPORT_ENTITY, 1500.0)
-    await move(hass, EXPORT_ENTITY, 2800.0)
+    await record(hass, IMPORT_ENTITY, DAY_START, [500.0])
+    await record(hass, EXPORT_ENTITY, DAY_START, [800.0])
+    await refresh(hass, entry)
 
-    assert float(hass.states.get(PREFIX + "grid_cost_so_far").state) == 0.0  # type: ignore[union-attr]
+    assert float(state_of(hass, "grid_cost_so_far")) == 0.0
     # 300 kWh of surplus at the feed-in rate of 6.
-    assert hass.states.get(PREFIX + "export_compensation_so_far").state == "1800"  # type: ignore[union-attr]
+    assert state_of(hass, "export_compensation_so_far") == "1800"
 
 
 async def test_closing_the_settlement_resets_the_running_totals(
-    hass: HomeAssistant, entry: MockConfigEntry
+    entry: MockConfigEntry, hass: HomeAssistant
 ) -> None:
-    reading_date = dt_util.now().date()
-    entry.runtime_data.seed(reading_date - timedelta(days=30), imported=500.0, exported=0.0)
-    entry.runtime_data.refresh_settlement()
+    start = TODAY - timedelta(days=30)
+    await coordinator(entry).async_seed(start, imported=500.0, exported=0.0)
     await hass.async_block_till_done()
     before = hass.states.get(PREFIX + "grid_cost_so_far")
     assert before is not None
     assert float(before.state) > 0
-    assert before.attributes["last_reset"] == dt_util.start_of_local_day(
-        reading_date - timedelta(days=30)
-    ).isoformat()
+    assert before.attributes["last_reset"] == dt_util.start_of_local_day(start).isoformat()
 
     await hass.services.async_call(
-        DOMAIN, SERVICE_CLOSE_SETTLEMENT, {ATTR_READING_DATE: reading_date}, blocking=True
+        DOMAIN, SERVICE_CLOSE_SETTLEMENT, {ATTR_READING_DATE: TODAY}, blocking=True
     )
+    await hass.async_block_till_done()
 
     state = hass.states.get(PREFIX + "grid_cost_so_far")
     assert state is not None
     assert float(state.state) == 0.0
-    assert state.attributes["last_reset"] == dt_util.start_of_local_day(reading_date).isoformat()
+    assert state.attributes["last_reset"] == dt_util.start_of_local_day(TODAY).isoformat()

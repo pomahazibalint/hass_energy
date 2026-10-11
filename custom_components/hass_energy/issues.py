@@ -93,3 +93,20 @@ def stale_since(last_seen: date | None, today: date, days: int) -> bool:
     if last_seen is None:
         return False
     return today - last_seen > timedelta(days=days)
+
+
+def source_unrecorded(hass: HomeAssistant, entry_id: str, unrecorded: list[str]) -> None:
+    """A source the recorder has no statistics for contributes nothing.
+
+    The settlement is read from long-term statistics, so a source that is
+    excluded from the recorder, or has no total state class, is invisible.
+    """
+
+    _set(
+        hass,
+        entry_id,
+        "source_unrecorded",
+        active=bool(unrecorded),
+        severity=ir.IssueSeverity.ERROR,
+        placeholders={"entities": ", ".join(unrecorded)},
+    )

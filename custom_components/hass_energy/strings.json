@@ -185,24 +185,6 @@
           "description": "kWh fed in over the period."
         }
       }
-    },
-    "adjust_recorded_energy": {
-      "name": "Adjust recorded energy",
-      "description": "Corrects the energy recorded against one price period, for a glitch that slipped through or a mistyped seed. Amounts are added, so give a negative number to take energy out. The recorder's own statistics are not touched; adjust those from Developer tools.",
-      "fields": {
-        "day": {
-          "name": "Day",
-          "description": "Any day in the price period to correct. Defaults to today."
-        },
-        "imported_kwh": {
-          "name": "Imported",
-          "description": "kWh to add to what was imported in that price period. Negative to remove."
-        },
-        "exported_kwh": {
-          "name": "Exported",
-          "description": "kWh to add to what was exported in that price period. Negative to remove."
-        }
-      }
     }
   },
   "issues": {
@@ -217,6 +199,10 @@
     "source_missing": {
       "title": "Energy source sensors are not reporting",
       "description": "{entities} are unavailable or not numeric. Nothing is being recorded from them, and the settlement will understate what the house used."
+    },
+    "source_unrecorded": {
+      "title": "Energy source sensors have no statistics",
+      "description": "The recorder has never compiled statistics for {entities}. The settlement is read from long-term statistics, so nothing from these sources counts until they are recorded with a total state class and a kWh unit."
     }
   }
 }

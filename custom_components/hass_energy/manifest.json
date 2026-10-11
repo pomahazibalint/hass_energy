@@ -1,13 +1,13 @@
 {
   "domain": "hass_energy",
   "name": "Energy Settlement",
-  "after_dependencies": [
-    "recorder"
-  ],
   "codeowners": [
     "@pomahazibalint"
   ],
   "config_flow": true,
+  "dependencies": [
+    "recorder"
+  ],
   "documentation": "https://github.com/pomahazibalint/hass_energy",
   "integration_type": "service",
   "iot_class": "calculated",

@@ -28,7 +28,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: SettlementEntry) -> bool
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: SettlementEntry) -> bool:
-    await entry.runtime_data.async_shutdown()
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
@@ -39,4 +38,4 @@ async def _options_updated(hass: HomeAssistant, entry: SettlementEntry) -> None:
     worth something else.
     """
 
-    entry.runtime_data.refresh_settlement()
+    await entry.runtime_data.async_refresh()

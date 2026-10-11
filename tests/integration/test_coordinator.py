@@ -58,6 +58,32 @@ async def test_a_meter_that_restarts_is_not_a_negative_quantity(
     assert coordinator(entry).state.imported == 14.0
 
 
+async def test_a_small_dip_is_a_glitch_and_not_a_restart(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """A stale value replayed on reconnect must not add the meter's lifetime total."""
+
+    await move(hass, IMPORT_ENTITY, 1010.0)
+    await move(hass, IMPORT_ENTITY, 1009.5)
+    await move(hass, IMPORT_ENTITY, 1012.0)
+
+    state = coordinator(entry).state
+    assert state.imported == 12.0
+    assert state.last_import == 1012.0
+
+
+async def test_the_baseline_waits_out_a_glitch(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Moving the baseline down with the glitch would count the recovery twice."""
+
+    await move(hass, IMPORT_ENTITY, 1010.0)
+    await move(hass, IMPORT_ENTITY, 1009.0)
+
+    assert coordinator(entry).state.last_import == 1010.0
+    assert coordinator(entry).state.imported == 10.0
+
+
 async def test_unusable_readings_are_ignored(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:

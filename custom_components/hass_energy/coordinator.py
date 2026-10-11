@@ -42,6 +42,11 @@ SAVE_DELAY = 30
 #: allowance to be earned against, never a prediction of the boundary.
 NOMINAL_PERIOD_DAYS = 365
 
+#: A reading below this fraction of the last one is a source that restarted its
+#: total. Anything closer is a glitch. The line is the one Home Assistant's own
+#: long-term statistics draw for a total_increasing sensor.
+RESTART_BELOW = 0.9
+
 
 @dataclass
 class Bucket:
@@ -159,28 +164,34 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             return
 
         if entity_id == self.import_entity:
-            delta = self._delta(self.state.last_import, reading)
-            self.state.last_import = reading
+            delta, self.state.last_import = self._movement(self.state.last_import, reading)
             self._bucket().imported += delta
         else:
-            delta = self._delta(self.state.last_export, reading)
-            self.state.last_export = reading
+            delta, self.state.last_export = self._movement(self.state.last_export, reading)
             self._bucket().exported += delta
 
         self._store.async_delay_save(self.state.as_dict, SAVE_DELAY)
         self.refresh_settlement()
 
     @staticmethod
-    def _delta(previous: float | None, reading: float) -> float:
-        """How much the meter moved.
+    def _movement(previous: float | None, reading: float) -> tuple[float, float | None]:
+        """How much the meter moved, and where the baseline now stands.
 
-        A reading below the last one means the source restarted its total, so
-        the new reading is the movement rather than a negative quantity.
+        A reading far below the last one means the source restarted its total,
+        so the new reading is the movement rather than a negative quantity. A
+        reading only slightly below it is a glitch — a reconnect replaying a
+        stale value, a wobble in the last digit — and is ignored, baseline and
+        all: taken for a restart it would add the meter's whole lifetime total
+        to the period, and the delayed save would make that permanent.
         """
 
         if previous is None:
-            return 0.0
-        return reading - previous if reading >= previous else reading
+            return 0.0, reading
+        if reading >= previous:
+            return reading - previous, reading
+        if reading >= previous * RESTART_BELOW:
+            return 0.0, previous
+        return reading, reading
 
     def _bucket(self, today: date | None = None) -> Bucket:
         """The bucket for the prices in force today."""

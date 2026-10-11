@@ -352,13 +352,53 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
 
         await self._store.async_save(self.state.as_dict())
 
-    async def async_close_settlement(self, reading_date: date) -> None:
-        """Start a new settlement period on the day the meter was read."""
+    async def async_close_settlement(self, reading_date: date, today: date | None = None) -> None:
+        """Start a new settlement period on the day the meter was read.
 
+        The reading is usually entered some days after it happened, and what
+        the meters did in between belongs to the period that follows it. The
+        buckets do not know which day their energy fell on, so each one's share
+        of the days since the reading carries over — the same by-day split that
+        seeding uses for energy nobody watched.
+        """
+
+        day = today or dt_util.now().date()
         self.state = PeriodState(
             start=reading_date,
+            buckets=self._since(reading_date, day),
             last_import=self.state.last_import,
             last_export=self.state.last_export,
         )
         await self._store.async_save(self.state.as_dict())
         self.refresh_settlement()
+
+    def _since(self, reading_date: date, day: date) -> dict[str, Bucket]:
+        """The recorded energy that fell on or after a day, apportioned by day."""
+
+        if reading_date >= day:
+            return {}
+        if reading_date <= self.state.start:
+            return {key: Bucket(b.imported, b.exported) for key, b in self.state.buckets.items()}
+
+        # The days each bucket spans. Energy from before the schedule began was
+        # recorded against its first price, so that bucket runs from the start
+        # of the period rather than from the price's own date.
+        schedule = schedule_from_options(self.entry.options)
+        window_start = max(self.state.start, schedule.entries[0].valid_from)
+        spans: dict[str, tuple[date, date]] = {}
+        if window_start < day:
+            for segment in schedule.segments(window_start, day):
+                spans[segment.prices.valid_from.isoformat()] = (segment.start, segment.end)
+            first = min(spans, key=lambda key: spans[key][0])
+            spans[first] = (self.state.start, spans[first][1])
+
+        carried: dict[str, Bucket] = {}
+        for key, bucket in self.state.buckets.items():
+            # A bucket no segment claims, left by a removed price, is treated as
+            # spanning the whole period: its energy has nowhere better to go.
+            start, end = spans.get(key, (self.state.start, day))
+            after = max((end - max(start, reading_date)).days, 0)
+            share = after / (end - start).days if end > start else 0.0
+            if share:
+                carried[key] = Bucket(bucket.imported * share, bucket.exported * share)
+        return carried

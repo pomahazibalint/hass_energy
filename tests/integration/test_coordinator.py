@@ -1,5 +1,6 @@
-from datetime import date
+from datetime import timedelta
 
+import pytest
 from custom_components.hass_energy.billing import forint
 from custom_components.hass_energy.const import (
     ATTR_READING_DATE,
@@ -11,6 +12,7 @@ from custom_components.hass_energy.const import (
 )
 from custom_components.hass_energy.coordinator import SettlementCoordinator
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from .conftest import EXPORT_ENTITY, IMPORT_ENTITY
@@ -202,19 +204,41 @@ async def test_closing_a_settlement_starts_a_new_period(
     """The boundary follows the meter reading, not the calendar."""
 
     await move(hass, IMPORT_ENTITY, 1500.0)
+    reading_date = dt_util.now().date()
 
     await hass.services.async_call(
         DOMAIN,
         SERVICE_CLOSE_SETTLEMENT,
-        {ATTR_READING_DATE: date(2026, 8, 4)},
+        {ATTR_READING_DATE: reading_date},
         blocking=True,
     )
 
     state = coordinator(entry).state
-    assert state.start == date(2026, 8, 4)
+    assert state.start == reading_date
     assert state.imported == 0
     # The meter did not go back to zero just because the period did.
     assert state.last_import == 1500.0
+
+
+async def test_energy_since_the_reading_carries_into_the_new_period(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """The reading is entered days after it happened; the days between are not lost."""
+
+    today = dt_util.now().date()
+    coordinator(entry).seed(today - timedelta(days=10), imported=100.0, exported=50.0)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_CLOSE_SETTLEMENT,
+        {ATTR_READING_DATE: today - timedelta(days=4)},
+        blocking=True,
+    )
+
+    state = coordinator(entry).state
+    assert state.start == today - timedelta(days=4)
+    assert state.imported == pytest.approx(40.0)
+    assert state.exported == pytest.approx(20.0)
 
 
 async def test_accrual_continues_after_a_settlement_closes(

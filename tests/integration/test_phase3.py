@@ -16,9 +16,9 @@ from custom_components.hass_energy.const import (
     SERVICE_SEED_PERIOD,
     STORAGE_KEY,
 )
+from custom_components.hass_energy.costs import statistic_id
 from custom_components.hass_energy.diagnostics import async_get_config_entry_diagnostics
 from custom_components.hass_energy.issues import OVERDUE_AFTER_DAYS
-from custom_components.hass_energy.services import statistic_id
 from custom_components.hass_energy.settings import price_entry
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.components.recorder import Recorder
@@ -288,7 +288,7 @@ async def test_a_past_invoice_becomes_history(
     await hass.async_block_till_done()
     await get_instance(hass).async_block_till_done()
 
-    stat_id = statistic_id(coordinator(entry), "imported_energy")
+    stat_id = statistic_id(entry.entry_id, "imported_energy")
     stats = await get_instance(hass).async_add_executor_job(
         statistics_during_period,
         hass,
@@ -303,7 +303,7 @@ async def test_a_past_invoice_becomes_history(
     assert rows[-1]["state"] == 7000.0
     assert rows[-1]["sum"] == 7000.0
 
-    cost_id = statistic_id(coordinator(entry), "settlement_cost")
+    cost_id = statistic_id(entry.entry_id, "settlement_cost")
     cost = await get_instance(hass).async_add_executor_job(
         statistics_during_period,
         hass,

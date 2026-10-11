@@ -7,6 +7,7 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
 from .coordinator import SettlementCoordinator
+from .costs import async_remove as remove_statistics
 from .services import register as register_services
 
 PLATFORMS = [Platform.SENSOR]
@@ -29,6 +30,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: SettlementEntry) -> bool
 
 async def async_unload_entry(hass: HomeAssistant, entry: SettlementEntry) -> bool:
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: SettlementEntry) -> None:
+    """A deleted metering point leaves no statistics the dashboard still offers."""
+
+    await remove_statistics(hass, entry.entry_id)
 
 
 async def _options_updated(hass: HomeAssistant, entry: SettlementEntry) -> None:

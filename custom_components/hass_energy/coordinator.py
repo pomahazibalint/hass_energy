@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, replace
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from functools import partial
 from typing import Any
 
@@ -36,6 +36,7 @@ from .const import (
     STORAGE_KEY,
     STORAGE_VERSION,
 )
+from .costs import async_publish
 from .history import Observed, async_observe
 from .settings import schedule_from_options, standing_charge_months, terms_from_options
 
@@ -176,14 +177,41 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
                 tz=dt_util.get_default_time_zone(),
             )
         )
+
+        # Only hours the recorder saw are published. The seeded remainder is
+        # in the bill, and in the netting position every later hour is costed
+        # against, but a flat smear of cost over months nobody watched would
+        # read in the dashboard as something that happened. The entities must
+        # not go unavailable because the statistics could not be written; the
+        # two are separate readers of the same bill.
+        try:
+            await async_publish(
+                self.hass,
+                self.entry.entry_id,
+                self.entry.title,
+                self._period_start(),
+                [
+                    cost
+                    for cost in self.costs
+                    if observed.first is not None and cost.start >= observed.first
+                ],
+            )
+        except Exception:
+            _LOGGER.exception("Could not publish the hourly costs for %s", self.entry.title)
         return bill
+
+    def _period_start(self) -> datetime:
+        """The UTC instant the period began, on the local calendar."""
+
+        return dt_util.as_utc(dt_util.start_of_local_day(self.state.start))
 
     async def _observe(self) -> Observed:
         """The period's hours so far, as the recorder has them."""
 
-        start = dt_util.as_utc(dt_util.start_of_local_day(self.state.start))
         end = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
-        return await async_observe(self.hass, self.import_entity, self.export_entity, start, end)
+        return await async_observe(
+            self.hass, self.import_entity, self.export_entity, self._period_start(), end
+        )
 
     def _with_unobserved(self, observed: Observed) -> list[Hour]:
         """Lay the unobserved remainder over the hours before the record begins.
@@ -198,7 +226,7 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
 
         hours = list(observed.hours)
         if not hours:
-            hours = [Hour(dt_util.as_utc(dt_util.start_of_local_day(state.start)))]
+            hours = [Hour(self._period_start())]
         targets = [
             i
             for i, hour in enumerate(hours)

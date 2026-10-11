@@ -19,7 +19,6 @@ from homeassistant.const import UnitOfEnergy
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 from homeassistant.util import dt as dt_util
-from homeassistant.util import slugify
 
 from .billing import MeterReadings, SettlementPeriod, calculate
 from .const import (
@@ -34,6 +33,7 @@ from .const import (
     SERVICE_SEED_PERIOD,
 )
 from .coordinator import SettlementCoordinator
+from .costs import statistic_id
 from .settings import schedule_from_options, standing_charge_months, terms_from_options
 
 CLOSE_SETTLEMENT_SCHEMA = vol.Schema({vol.Optional(ATTR_READING_DATE): cv.date})
@@ -54,12 +54,6 @@ IMPORT_INVOICE_SCHEMA = vol.Schema(
         vol.Optional(ATTR_EXPORTED_KWH, default=0.0): vol.Coerce(float),
     }
 )
-
-
-def statistic_id(coordinator: SettlementCoordinator, kind: str) -> str:
-    """Statistic ids are slugs, and an entry id is not one."""
-
-    return f"{DOMAIN}:{slugify(coordinator.entry.entry_id)}_{kind}"
 
 
 def _coordinators(hass: HomeAssistant) -> list[SettlementCoordinator]:
@@ -113,7 +107,7 @@ async def _import_invoice(hass: HomeAssistant, call: ServiceCall) -> None:
             ("settlement_cost", currency, float(bill.gross_total)),
             ("surplus_value", currency, float(bill.surplus_net)),
         ):
-            stat_id = statistic_id(coordinator, kind)
+            stat_id = statistic_id(coordinator.entry.entry_id, kind)
             running = await _last_sum(hass, stat_id)
             metadata = StatisticMetaData(
                 mean_type=StatisticMeanType.NONE,

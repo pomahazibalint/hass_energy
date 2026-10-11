@@ -1,6 +1,14 @@
 # Recorder-backed settlement
 
-A plan to rebuild the integration's record of energy on Home Assistant's own
+Implemented in 0.4.0, which collapsed the first three releases of the
+migration below into one: the record was retired in the same release that
+introduced its replacement, with the running-total sensors kept behind a
+repair issue as planned. One departure from the plan: cost statistics are
+written only for hours the recorder observed. The seeded remainder stays in
+the bill and in the netting position, but a flat smear of cost over months
+nobody watched would have read in the dashboard as something that happened.
+
+This was a plan to rebuild the integration's record of energy on Home Assistant's own
 long-term statistics, and to deliver cost to the energy dashboard as hourly
 statistics rather than as live sensors.
 

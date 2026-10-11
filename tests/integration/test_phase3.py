@@ -315,3 +315,16 @@ async def test_a_past_invoice_becomes_history(
         {"sum", "state"},
     )
     assert cost[cost_id][-1]["state"] == 1836.0
+
+
+async def test_the_retired_sensors_point_at_their_successors(
+    entry: MockConfigEntry, hass: HomeAssistant
+) -> None:
+    registry = ir.async_get(hass)
+    issue = registry.async_get_issue(DOMAIN, f"running_totals_retired_{entry.entry_id}")
+
+    assert issue is not None
+    assert issue.translation_placeholders == {
+        "grid_cost": statistic_id(entry.entry_id, "grid_cost"),
+        "export_compensation": statistic_id(entry.entry_id, "export_compensation"),
+    }

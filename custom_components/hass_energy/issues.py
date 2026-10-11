@@ -110,3 +110,20 @@ def source_unrecorded(hass: HomeAssistant, entry_id: str, unrecorded: list[str])
         severity=ir.IssueSeverity.ERROR,
         placeholders={"entities": ", ".join(unrecorded)},
     )
+
+
+def running_totals_retired(hass: HomeAssistant, entry_id: str, statistics: dict[str, str]) -> None:
+    """The running-total sensors have a successor; say where to point the dashboard.
+
+    An entity that silently disappears from a dashboard source is worse than
+    one that asks to be replaced, so the sensors stay one release and this
+    names the statistics that take their place.
+    """
+
+    _set(
+        hass,
+        entry_id,
+        "running_totals_retired",
+        active=True,
+        placeholders=statistics,
+    )

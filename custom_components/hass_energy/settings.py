@@ -20,7 +20,6 @@ from .const import (
     CONF_CURRENCY,
     CONF_FEED_IN,
     CONF_MARKET,
-    CONF_MAX_STEP_KWH,
     CONF_MODE,
     CONF_PRICES,
     CONF_STANDING_CHARGE,
@@ -32,7 +31,6 @@ from .const import (
     DEFAULT_CURRENCY,
     DEFAULT_FEED_IN,
     DEFAULT_MARKET,
-    DEFAULT_MAX_STEP_KWH,
     DEFAULT_STANDING_CHARGE,
     DEFAULT_STANDING_CHARGE_MONTHS,
     DEFAULT_SUBSIDIZED,
@@ -77,12 +75,6 @@ def terms_from_options(options: Mapping[str, Any]) -> TariffTerms:
 
 def standing_charge_months(options: Mapping[str, Any]) -> int:
     return int(options.get(CONF_STANDING_CHARGE_MONTHS, DEFAULT_STANDING_CHARGE_MONTHS))
-
-
-def max_step_kwh(options: Mapping[str, Any]) -> float:
-    """The largest movement a single reading is believed to report."""
-
-    return float(options.get(CONF_MAX_STEP_KWH, DEFAULT_MAX_STEP_KWH))
 
 
 def schedule_from_options(options: Mapping[str, Any]) -> PriceSchedule:

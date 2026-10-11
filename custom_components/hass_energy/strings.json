@@ -35,11 +35,9 @@
           "standing_charge_per_month": "Standing charge per month, net",
           "standing_charge_months": "Standing charge months per settlement",
           "vat_percent": "VAT (%)",
-          "currency": "Currency",
-          "max_step_kwh": "Largest believable movement per reading (kWh)"
+          "currency": "Currency"
         },
         "data_description": {
-          "max_step_kwh": "A reading that moves more than this is held back until a second reading agrees with it. Catches an inverter reporting its lifetime total as one step. Zero disables the check.",
           "allowance_basis": "Whether the allowance is spent by everything withdrawn, or only by what is left after generation is netted off. The two differ sharply for a household that both draws and generates a lot.",
           "mode": "Szaldó nets generation against consumption. It closes ten years after commissioning, after which settlement is gross."
         }
@@ -203,6 +201,10 @@
     "source_unrecorded": {
       "title": "Energy source sensors have no statistics",
       "description": "The recorder has never compiled statistics for {entities}. The settlement is read from long-term statistics, so nothing from these sources counts until they are recorded with a total state class and a kWh unit."
+    },
+    "running_totals_retired": {
+      "title": "Grid cost and export compensation sensors are retired",
+      "description": "The energy dashboard is now fed by hourly statistics that follow the bill and can be corrected in place. In the dashboard's grid settings, choose \"use an entity tracking the total costs\" and pick {grid_cost} for consumption and {export_compensation} for return to grid. The Grid cost so far and Export compensation so far sensors will be removed in the next release."
     }
   }
 }

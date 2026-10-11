@@ -20,7 +20,6 @@ from .const import (
     CONF_FEED_IN,
     CONF_IMPORT_ENTITY,
     CONF_MARKET,
-    CONF_MAX_STEP_KWH,
     CONF_MODE,
     CONF_PRICES,
     CONF_STANDING_CHARGE,
@@ -32,7 +31,6 @@ from .const import (
     DEFAULT_CURRENCY,
     DEFAULT_FEED_IN,
     DEFAULT_MARKET,
-    DEFAULT_MAX_STEP_KWH,
     DEFAULT_STANDING_CHARGE,
     DEFAULT_STANDING_CHARGE_MONTHS,
     DEFAULT_SUBSIDIZED,
@@ -55,7 +53,7 @@ def _price_number() -> selector.NumberSelector:
 class HassEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
     """Collects the meters. Everything else has a sensible default."""
 
-    VERSION = 1
+    VERSION = 2
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -160,10 +158,6 @@ class HassEnergyOptionsFlow(OptionsFlow):
                 vol.Required(
                     CONF_CURRENCY, default=options.get(CONF_CURRENCY, DEFAULT_CURRENCY)
                 ): str,
-                vol.Required(
-                    CONF_MAX_STEP_KWH,
-                    default=options.get(CONF_MAX_STEP_KWH, DEFAULT_MAX_STEP_KWH),
-                ): _price_number(),
             }
         )
         return self.async_show_form(step_id="terms", data_schema=schema)

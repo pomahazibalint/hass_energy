@@ -170,14 +170,20 @@ projection, and a diagnostics view needs the problem entities.
 
 ## The integration
 
-Only quantities are stored: kWh withdrawn and fed in, bucketed by the price
-period they happened in, alongside the settlement period they belong to. Every
-figure with a currency on it is derived on demand.
+Nothing about energy is stored. The settlement period is a start date over the
+recorder's long-term statistics for the import and export meters: the recorder
+compiles an hourly sum for every energy sensor with a total state class,
+applies its own reset and dip detection, keeps the rows indefinitely and lets a
+user repair an outlier from the Statistics page. Reading those rows gives
+per-hour energy for the whole period, including hours before the integration
+was installed, as long as the sensors were recorded. Every figure with a
+currency on it is derived from them on demand.
 
 That is what makes the contract editable. A corrected price, a switched
-allowance basis or a changed standing charge re-values the same recorded energy
-instead of contradicting it, and a price backdated to before the period started
-simply recomputes. Storing money would have made each of those a migration.
+allowance basis or a changed standing charge re-values the same hours instead
+of contradicting them, and a price backdated into the period applies to the
+hours after its date, because the hours are known. Storing energy would have
+made the first a migration and the second a guess.
 
 Prices are edited as "these are the prices in force from this day". Leaving the
 date at today is a change; setting it back is a correction noticed late. The
@@ -187,43 +193,37 @@ them rather than adding a second row.
 The settlement period runs to a nominal year until a meter reading ends it,
 because the allowance is annual: prorating it to the days elapsed would report
 a household as over its allowance a week into a period it will finish
-comfortably inside. `close_settlement` takes the reading date and starts the
-next period there.
+comfortably inside. A period that has run past the year stretches to cover
+today, so every hour recorded has a price period to fall in. `close_settlement`
+takes the reading date and starts the next period there; the hours since the
+reading are in the recorder whenever the reading is entered, so nothing is
+carried over by hand and nothing is lost.
 
 A settlement period that is already under way when the integration is installed
 is adopted with the `seed_period` action, from the last invoice and the current
-meter. Without it a March installation would account from zero for a period
-that began in September. The seeded energy is spread across the price periods
-it spanned by day, because the shape of energy nobody observed is unknowable;
-everything recorded afterwards is exact.
-
-What slips through is corrected with `adjust_recorded_energy`, which adds a
-signed quantity to one price period's bucket. It is the counterpart of the
-recorder's statistics adjustment for the one store the recorder does not
-reach: setting a source's state in Developer tools fires an ordinary reading,
-and adjusting its statistics changes nothing the integration reads.
+meter. Whatever the recorder already holds for the period is not seeded twice:
+only the part above the statistics is kept, as the unobserved remainder, and
+laid over the hours before the recorder's history begins, because the shape of
+energy nobody observed is unknowable. If the sources were recorded all along,
+there is nothing to keep and the period is simply read from history. The
+remainder and the period start are the whole of what is stored.
 
 Past invoices go in through `import_invoice`, which writes them to the recorder
 as external statistics. Home Assistant never saw those years, so nothing else
 can supply them, and without it a fresh install has no history at all.
 
-A meter's movement is believed within limits. A reading slightly below the
-last one is a glitch and ignored; one far below it is a restart, and the
-reading is the movement. A movement larger than the configured step, in either
-direction, is held back until a second reading agrees with it, because
-inverters are known to report their lifetime total as a single step when they
-power on or off and to revert just as suddenly. Counted, that would add years
-of energy to the period, and the delayed save would make it permanent. A
-reading held back costs nothing when the source comes back; one that persists
-becomes the baseline without the jump itself being counted.
-
 Problems are repair issues rather than binary sensors: a price schedule that no
 longer reaches the start of the period, a settlement running far past a year
-with no reading recorded, a source that has stopped reporting. The checks run
-on every refresh rather than on a timer, so they cannot describe a state the
-integration has already left. A schedule that cannot price the period makes the
-entities unavailable rather than reporting zero — unvaluable is not the same
-number as nothing.
+with no reading recorded, a source that has stopped reporting, a source the
+recorder has no statistics for. The checks run on every refresh, which follows
+the recorder's hourly compile, so they cannot describe a state the integration
+has already left. A schedule that cannot price the period makes the entities
+unavailable rather than reporting zero — unvaluable is not the same number as
+nothing.
+
+The entities lag the meter by up to an hour, the lag the dashboard beside them
+already has. The figures they answer for — how much allowance is left, what the
+supplier will owe — do not turn on the last hour.
 
 Home Assistant's own energy dashboard values each hour's energy at a price and
 sums the hours. Under szaldó no price can make that come out right: a kWh's
@@ -232,19 +232,27 @@ order-dependent and does not reconcile with the invoice. `unit_price` and
 `feed_in_price` exist for the dashboard's price option anyway, and are honest
 under gross settlement.
 
-`grid_cost` and `export_compensation` are what to point the dashboard at under
-szaldó, through its "entity tracking the total costs" option. They are running
-totals of the bill, so each hour's figure is the change in the bill that hour
-and the hours sum to the invoice by construction. An hour in which export
-cancels earlier import is a negative cost, which is the truth of netting. They
-report in Home Assistant's configured currency, which is what the dashboard
-labels costs in, and carry `last_reset` at the period start so that closing a
-settlement reads as a new period rather than a negative cost. The standing
-charge is left out: it is owed however the meters move.
+What to point the dashboard at instead are two external statistics,
+`hass_energy:<entry>_grid_cost` and `hass_energy:<entry>_export_compensation`,
+through its "entity tracking the total costs" option. The bill is allocated
+to hours chronologically: an hour's cost is the bill after it less the bill
+before it, so the hours sum to the invoice by construction, and an hour in
+which export cancels earlier import is a negative cost, which is the truth of
+netting. A row written for an hour that already has one replaces it, so a
+backdated price or a repaired reading rewrites history rather than appearing
+as a spike in the hour of the correction. Only hours the recorder saw are
+published: the seeded remainder is in the bill, and in the netting position
+every later hour is costed against, but a flat smear of cost over months
+nobody watched would read as something that happened. The statistics carry
+Home Assistant's configured currency, which is what the dashboard labels
+costs in, and the standing charge is left out: it is owed however the meters
+move. The running-total sensors that preceded them remain for one release
+behind a repair issue naming their successors.
 
 Testing needs Home Assistant, so those tests live in `tests/integration` and run
-in the workflow job that installs it. The engine's own tests need nothing and
-run everywhere.
+in the workflow job that installs it. They put hours into the recorder directly
+and run on a frozen clock. The engine's own tests need nothing and run
+everywhere.
 
 ## Releasing
 

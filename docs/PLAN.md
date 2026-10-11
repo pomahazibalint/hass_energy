@@ -48,24 +48,24 @@ the generated YAML against Home Assistant's own schemas with
 Home Assistant instance. `examples/` holds a configuration with its generated
 output committed beside it.
 
-A Home Assistant integration records meter quantities and derives the
-settlement from them, for the two things generated YAML cannot express: prices
-that change inside a settlement period, and a period boundary set by a meter
-reading rather than a date. It ships its own copy of the settlement engine, so
-it installs by copying one directory and needs nothing at runtime.
+A Home Assistant integration derives the settlement from the recorder's
+long-term statistics for the grid meters, for the two things generated YAML
+cannot express: prices that change inside a settlement period, and a period
+boundary set by a meter reading rather than a date. It publishes the bill's
+hourly movement as statistics the energy dashboard reads. It ships its own copy
+of the settlement engine, so it installs by copying one directory and needs
+nothing at runtime.
 
 Dashboards are the remaining feature work, and the entities they need now
 exist: the executive view reads the projections, the diagnostics view reads the
 problem entities.
 
-The integration's own record of energy is its weak point: it needs its own
-reset detection, glitch handling and correction action, and cannot apportion a
-price backdated into the period. [RECORDER_BACKED_SETTLEMENT.md](RECORDER_BACKED_SETTLEMENT.md)
-plans its replacement by the recorder's long-term statistics, with cost
-delivered to the energy dashboard as hourly statistics, and the migration path.
+[RECORDER_BACKED_SETTLEMENT.md](RECORDER_BACKED_SETTLEMENT.md) records why
+the integration reads the recorder rather than keeping its own record of
+energy, and the migration that got it there.
 
 ## Ideas backlog
-- Recorder-backed settlement, see docs/RECORDER_BACKED_SETTLEMENT.md
+- Remove the retired running-total sensors and their repair issue
 - Tariff plugins
 - Battery support
 - Dynamic pricing

@@ -36,21 +36,23 @@ integration > Energy Settlement**.
 It needs nothing installed at runtime: the settlement engine ships inside the
 component.
 
-Installed part-way through a settlement period, run the **Seed the settlement
-period** action with the figures from your last invoice, or it will account
-from zero for a period that began months ago. Past invoices can be brought in
+The settlement is read from Home Assistant's long-term statistics for the
+import and export meters, so the sources must be recorded with a total state
+class. Installed part-way through a settlement period, run the **Seed the
+settlement period** action with the figures from your last invoice; only what
+the recorder does not already hold is kept. Past invoices can be brought in
 with **Import a settled invoice**, which records them as long-term statistics.
-A reading that was wrong, such as an inverter reporting its lifetime total as
-one step, is taken out again with **Adjust recorded energy**; Developer tools
-cannot reach the integration's own record.
+A wrong meter reading is repaired where Home Assistant repairs any statistic,
+on the Developer tools Statistics page, and the settlement follows.
 
 For Home Assistant's energy dashboard, set the grid consumption and return
-sources to **use an entity tracking the total costs** and pick **Grid cost so
-far** and **Export compensation so far**. Those follow the bill exactly, so the
-hours add up to the invoice; under szaldó an hour of export that cancels
-earlier import shows as a negative cost. **Current unit price** and **Current
-feed-in price** serve the dashboard's price option instead, which is only a
-true figure under gross settlement.
+sources to **use an entity tracking the total costs** and pick the
+**grid cost** and **export compensation** statistics the integration writes.
+They follow the bill exactly, hour by hour, so the hours add up to the invoice
+and a correction rewrites history rather than spiking; under szaldó an hour of
+export that cancels earlier import shows as a negative cost. **Current unit
+price** and **Current feed-in price** serve the dashboard's price option
+instead, which is only a true figure under gross settlement.
 
 ## Quick start
 

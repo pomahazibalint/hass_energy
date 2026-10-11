@@ -21,9 +21,8 @@ CONF_MODE: Final = "mode"
 CONF_ALLOWANCE_BASIS: Final = "allowance_basis"
 CONF_CURRENCY: Final = "currency"
 CONF_PRICES: Final = "prices"
-#: The largest movement one reading can report before it is held back as a
-#: glitch. Inverters are known to report a lifetime total as a single step.
-CONF_MAX_STEP_KWH: Final = "max_step_kwh"
+#: Dropped by the entry migration to version 2: the record it limited is gone.
+RETIRED_OPTIONS: Final = ("max_step_kwh",)
 
 #: One entry of the price schedule.
 CONF_VALID_FROM: Final = "valid_from"
@@ -52,6 +51,3 @@ DEFAULT_CURRENCY: Final = "Ft"
 DEFAULT_SUBSIDIZED: Final = 36.386
 DEFAULT_MARKET: Final = 70.104
 DEFAULT_FEED_IN: Final = 5.11
-#: Generous: a slowly polled meter on a heat-pump house can legitimately step
-#: tens of kWh, while a lifetime total dumped as one reading is thousands.
-DEFAULT_MAX_STEP_KWH: Final = 500.0

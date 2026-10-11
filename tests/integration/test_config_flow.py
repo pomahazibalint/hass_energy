@@ -13,8 +13,9 @@ from custom_components.hass_energy.const import (
     CONF_VALID_FROM,
     DOMAIN,
 )
+from custom_components.hass_energy.settings import price_entry
 from homeassistant.components.recorder import Recorder
-from homeassistant.config_entries import SOURCE_USER
+from homeassistant.config_entries import SOURCE_USER, ConfigEntryState
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
@@ -201,8 +202,32 @@ async def test_the_allowance_basis_is_switchable(
             "standing_charge_months": 12,
             "vat_percent": 27.0,
             "currency": "Ft",
-            "max_step_kwh": 500.0,
         },
     )
 
     assert result["data"][CONF_ALLOWANCE_BASIS] == "gross"
+
+
+async def test_a_version_one_entry_loses_its_step_limit(
+    enable_custom_integrations: None, hass: HomeAssistant
+) -> None:
+    """The option guarded a record the integration no longer keeps."""
+
+    hass.states.async_set(IMPORT_ENTITY, "1000.0")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        version=1,
+        title="Old settlement",
+        data={CONF_IMPORT_ENTITY: IMPORT_ENTITY},
+        options={
+            CONF_PRICES: [price_entry(date(2024, 1, 1), 36.386, 70.104, 5.11)],
+            "max_step_kwh": 500.0,
+        },
+    )
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert entry.version == 2
+    assert "max_step_kwh" not in entry.options
+    assert entry.state is ConfigEntryState.LOADED

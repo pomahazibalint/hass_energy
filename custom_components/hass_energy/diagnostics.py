@@ -11,7 +11,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 
 from . import SettlementEntry
-from .settings import max_step_kwh, schedule_from_options, terms_from_options
+from .settings import schedule_from_options, terms_from_options
 
 
 async def async_get_config_entry_diagnostics(
@@ -58,7 +58,6 @@ async def async_get_config_entry_diagnostics(
             "import": coordinator.import_entity,
             "export": coordinator.export_entity,
             "missing": coordinator.missing_sources(),
-            "max_step_kwh": max_step_kwh(entry.options),
         },
         "period": coordinator.state.as_dict(),
         "observed": observed,

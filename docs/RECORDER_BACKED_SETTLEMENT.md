@@ -75,11 +75,16 @@ the edited date; after a repair on the Statistics page it is every hour from
 the repaired one. A year of hourly rows for two sensors is around eighteen
 thousand rows, read in one executor job, which is cheap once an hour.
 
-The live entities keep their meaning but change their source. The bill they
-publish is the hourly model plus the current hour's tail, taken from the
-source sensors' state since the last compiled hour, so Total payable still
-moves as the meter does. The two running-total sensors added for the
-dashboard become redundant and are retired; see the migration.
+The live entities keep their meaning but change their source: the bill they
+publish is the hourly model, so Total payable lags the meter by up to an hour.
+That is the lag the dashboard beside it already has, and the figures these
+entities answer for — how much allowance is left, what the supplier will owe —
+do not turn on the last hour. Should the lag ever matter, the current hour can
+be filled from the recorder's five-minute statistics through the same query
+with a different period; it must not be filled from the source sensors'
+states, which would bring back a second record with its own rules. The two
+running-total sensors added for the dashboard become redundant and are
+retired; see the migration.
 
 Closing a settlement becomes a date. The new period's energy is the hours from
 the reading date onward, which the recorder already has, so nothing is carried
@@ -145,8 +150,8 @@ totals, so any divergence between the recorded and the observed period is
 visible before anything depends on it. The two external statistics appear in
 the dashboard's selector at once. The running-total sensors keep working.
 
-Switching the source. The live entities are derived from the hourly model with
-the current hour's tail. On the first start of this version, the stored
+Switching the source. The live entities are derived from the hourly model. On
+the first start of this version, the stored
 buckets are reconciled against the recorder: observed energy since the period
 start is read from statistics, and whatever the store holds above that is kept
 as the unobserved remainder, spread by day across the hours before the
@@ -172,20 +177,34 @@ The migration is tested by setting up an entry with a version 1 store and a
 recorder holding part of the period, and checking the remainder that comes
 out.
 
-## Open questions
+## Settled questions
 
-Whether the dashboard's cost selector lists external statistics in every
-Home Assistant version the integration supports. Tibber's cost statistics are
-selected that way, and the dashboard's validation accepts any statistic id it
-has metadata for, but this should be confirmed on a live instance before the
-running-total sensors are retired.
+Whether the dashboard's cost selector lists external statistics. It does. In
+the frontend's `dialog-energy-grid-settings.ts`, the "entity tracking the
+total costs" option for both consumption and return is an `ha-statistic-picker`
+with no filter at all, bound to `stat_cost` and `stat_compensation`. That
+picker fills itself from `recorder/list_statistic_ids`, which returns every
+statistic the recorder knows regardless of source, and shows an id with a
+colon and no period as an external statistic labelled with its domain. The
+energy component's validation accepts any cost statistic it has metadata for
+and only inspects state class and unit when the id is an entity. Tibber has
+documented its `tibber:energy_totalcost_*` and `tibber:energy_profit_*`
+statistics as dashboard cost sources for years, which covers the Home
+Assistant versions this integration supports. Checked against the frontend's
+development branch on 11 October 2026.
 
-Whether to keep a live tail at all. It costs a second code path for a figure
-that is at most an hour ahead of the statistics. The argument for it is that a
-household watching the allowance run out wants the number now; the argument
-against is that the dashboard it stands beside is an hour behind anyway.
+Whether to keep a live tail from the source sensors' states. No. The only
+place the figure is read beside anything else is the dashboard, which is an
+hour behind in any case, and a state-driven tail is a second record of energy
+with its own reset and glitch rules, which is the thing this plan removes. If
+the lag is ever felt, the five-minute statistics fill the current hour through
+the same code path.
 
-Whether the generator's packages should follow. They read utility meters, which
-are the same kind of record with the same weaknesses. Reading device energy
-from statistics instead would make the per-device attribution correctable the
-same way, but it is a separate piece of work with its own plan.
+Whether the generator's packages should follow. Not as part of this. The
+dashboard's individual-devices section reads each device's own energy
+statistics and shows no cost per device, so there is nothing for per-device
+cost statistics to feed. What the generator adds — cost per device, split by
+price band — is only visible in its own entities, and the utility meters
+behind them are corrected with `utility_meter.calibrate`, which Home Assistant
+already provides. The meters' weaknesses are real but have a remedy; the
+integration's record had none.

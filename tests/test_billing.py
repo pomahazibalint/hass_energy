@@ -188,6 +188,87 @@ def test_quantities_fall_back_to_a_day_split() -> None:
     assert first.kwh == pytest.approx(365 * 182 / 365)
 
 
+def test_segment_quantities_are_a_shape_scaled_to_the_settled_total() -> None:
+    """Netting fixes the totals; the per-segment figures only say where they fell."""
+
+    schedule = PriceSchedule(
+        [
+            Prices(date(2024, 1, 1), subsidized=30.0, market=60.0, feed_in=5.0),
+            Prices(date(2024, 7, 1), subsidized=40.0, market=80.0, feed_in=6.0),
+        ]
+    )
+    # 4 000 withdrawn against 1 000 fed in: 3 000 billed, in the 3:1 shape of
+    # the withdrawal, not the 3 000 and 1 000 the meters recorded.
+    bill = calculate(
+        YEAR,
+        MeterReadings(imported_kwh=4000, exported_kwh=1000),
+        schedule,
+        TERMS,
+        standing_charge_months=12,
+        consumption_by_segment=[3000, 1000],
+        feed_in_by_segment=[200, 800],
+    )
+
+    assert bill.billed_kwh == 3000
+    assert [round(line.kwh, 6) for line in bill.subsidized] == [1892.25, 630.75]
+    assert bill.subsidized_kwh + bill.market_kwh == pytest.approx(3000)
+    assert bill.surplus == ()
+
+
+def test_gross_settlement_lines_add_up_to_the_gross_quantities() -> None:
+    """Under brutto the recorded shape and the settled totals always differ."""
+
+    schedule = PriceSchedule(
+        [
+            Prices(date(2024, 1, 1), subsidized=30.0, market=60.0, feed_in=5.0),
+            Prices(date(2024, 7, 1), subsidized=40.0, market=80.0, feed_in=6.0),
+        ]
+    )
+    terms = TariffTerms(mode=SettlementMode.BRUTTO)
+
+    bill = calculate(
+        YEAR,
+        MeterReadings(imported_kwh=4000, exported_kwh=5000),
+        schedule,
+        terms,
+        standing_charge_months=12,
+        consumption_by_segment=[3000, 1000],
+        feed_in_by_segment=[2000, 3000],
+    )
+
+    assert [round(line.kwh, 6) for line in (*bill.subsidized, *bill.market)] == [
+        1892.25,
+        630.75,
+        1107.75,
+        369.25,
+    ]
+    assert bill.subsidized_kwh + bill.market_kwh == pytest.approx(4000)
+    assert [line.kwh for line in bill.surplus] == [2000, 3000]
+    assert bill.surplus_net == forint(2000 * 5.0) + forint(3000 * 6.0)
+
+
+def test_an_empty_shape_falls_back_to_a_day_split() -> None:
+    schedule = PriceSchedule(
+        [
+            Prices(date(2024, 1, 1), subsidized=30.0, market=60.0, feed_in=5.0),
+            Prices(date(2024, 7, 1), subsidized=40.0, market=80.0, feed_in=6.0),
+        ]
+    )
+
+    bill = calculate(
+        YEAR,
+        MeterReadings(0, 365),
+        schedule,
+        TERMS,
+        standing_charge_months=12,
+        feed_in_by_segment=[0, 0],
+    )
+
+    first, second = bill.surplus
+    assert first.kwh == pytest.approx(365 * 182 / 365)
+    assert first.kwh + second.kwh == pytest.approx(365)
+
+
 def test_a_wrong_number_of_segment_quantities_is_rejected() -> None:
     with pytest.raises(ValueError, match="Expected 1 per-segment quantities"):
         calculate(

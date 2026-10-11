@@ -317,16 +317,10 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         # Totals come from everything recorded, not from the buckets the
         # current schedule happens to reach. Editing prices changes which
         # buckets a segment claims, and energy must not disappear from the bill
-        # because a price boundary moved. The per-segment figures only shape
-        # the apportionment, which _split_like renormalises.
+        # because a price boundary moved. The per-segment figures are only the
+        # shape of the apportionment; the engine nets and scales them, so the
+        # settlement mode is its concern and not repeated here.
         readings = MeterReadings(self.state.imported, self.state.exported)
-        # The engine wants the billed and surplus quantities per segment, and
-        # only one of them is non-zero over the period, so the recorded split
-        # of whichever it is carries the apportionment.
-        billed = max(readings.imported_kwh - readings.exported_kwh, 0.0)
-        consumption = _split_like(billed, imported)
-        surplus = max(readings.exported_kwh - readings.imported_kwh, 0.0)
-        feed_in = _split_like(surplus, exported)
 
         return calculate(
             period,
@@ -334,8 +328,8 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             schedule,
             terms_from_options(self.entry.options),
             standing_charge_months=standing_charge_months(self.entry.options),
-            consumption_by_segment=consumption,
-            feed_in_by_segment=feed_in,
+            consumption_by_segment=imported,
+            feed_in_by_segment=exported,
         )
 
     async def async_shutdown(self) -> None:
@@ -357,12 +351,3 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         )
         await self._store.async_save(self.state.as_dict())
         self.refresh_settlement()
-
-
-def _split_like(total: float, shape: list[float]) -> list[float]:
-    """Spread a total across segments in proportion to a recorded shape."""
-
-    measured = sum(shape)
-    if not measured:
-        return [total / len(shape)] * len(shape) if shape else []
-    return [total * value / measured for value in shape]

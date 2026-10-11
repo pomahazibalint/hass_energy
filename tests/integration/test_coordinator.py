@@ -1,8 +1,10 @@
 from datetime import date
 
+from custom_components.hass_energy.billing import forint
 from custom_components.hass_energy.const import (
     ATTR_READING_DATE,
     CONF_ALLOWANCE_BASIS,
+    CONF_MODE,
     CONF_PRICES,
     DOMAIN,
     SERVICE_CLOSE_SETTLEMENT,
@@ -104,6 +106,29 @@ async def test_net_export_produces_a_surplus_and_no_energy_charge(
     assert bill.energy_net == 0
     # The standing charge is owed regardless.
     assert bill.gross_total == 1836
+
+
+async def test_gross_settlement_bills_all_withdrawal_and_buys_all_feed_in(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Under brutto nothing is netted, however the meters compare."""
+
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, CONF_MODE: "brutto"}
+    )
+    await hass.async_block_till_done()
+    # More fed in than withdrawn: under szaldó there would be nothing to bill.
+    await move(hass, IMPORT_ENTITY, 1500.0)
+    await move(hass, EXPORT_ENTITY, 2800.0)
+
+    bill = coordinator(entry).data
+
+    assert bill.billed_kwh == 500.0
+    assert bill.subsidized_kwh + bill.market_kwh == 500.0
+    assert bill.energy_net == 500.0 * 40.0
+    assert bill.surplus_kwh == 800.0
+    assert sum(line.kwh for line in bill.surplus) == 800.0
+    assert bill.surplus_net == forint(800.0 * 6.0)
 
 
 async def test_changing_the_contract_revalues_the_same_quantities(

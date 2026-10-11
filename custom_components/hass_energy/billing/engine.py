@@ -28,17 +28,30 @@ def _share_by_days(total: float, segments: Sequence[Segment]) -> list[float]:
 
 
 def _allocate(
-    total: float, segments: Sequence[Segment], known: Sequence[float] | None
+    total: float, segments: Sequence[Segment], shape: Sequence[float] | None
 ) -> list[float]:
-    if known is None:
+    """Spread a settled quantity across segments in the proportions of a shape.
+
+    The shape is what the meters recorded per segment. It is a proportion, not
+    the quantity itself: netting decides how much is billed or bought over the
+    whole period, and that total is then divided in the shape's proportions.
+    Passing the recorded quantities straight through would make the lines
+    disagree with the settled total whenever the two differ, which under gross
+    settlement they always do.
+    """
+
+    if shape is None:
         return _share_by_days(total, segments)
-    if len(known) != len(segments):
+    if len(shape) != len(segments):
         raise ValueError(
-            f"Expected {len(segments)} per-segment quantities, got {len(known)}."
+            f"Expected {len(segments)} per-segment quantities, got {len(shape)}."
         )
-    if any(quantity < 0 for quantity in known):
+    if any(quantity < 0 for quantity in shape):
         raise ValueError("Per-segment quantities cannot be negative.")
-    return list(known)
+    recorded = sum(shape)
+    if not recorded:
+        return _share_by_days(total, segments)
+    return [total * quantity / recorded for quantity in shape]
 
 
 def _bands(
@@ -71,6 +84,12 @@ def calculate(
     ``standing_charge_months`` is taken rather than derived: both reference
     invoices charge twelve months over periods of 359 and 368 days, so the
     count follows the supplier's billing months and not the calendar.
+
+    ``consumption_by_segment`` and ``feed_in_by_segment`` give the shape of
+    withdrawal and feed-in across the price periods, one figure per segment.
+    Only their proportions matter: the billed and bought totals come from
+    netting, and the shape says where in the period each fell. Without them the
+    split falls back to days.
     """
 
     if standing_charge_months < 0:
@@ -99,11 +118,10 @@ def calculate(
 
     # Each band is spread across the price periods in proportion to how much
     # energy was billed in each, then priced at the rate in force there.
-    total_consumption = sum(consumption)
     subsidized_lines: list[Line] = []
     market_lines: list[Line] = []
     for segment, quantity in zip(segments, consumption, strict=True):
-        share = quantity / total_consumption if total_consumption else 0.0
+        share = quantity / billed_kwh if billed_kwh else 0.0
         for band_kwh, prices, lines in (
             (subsidized_kwh, segment.prices.subsidized, subsidized_lines),
             (market_kwh, segment.prices.market, market_lines),

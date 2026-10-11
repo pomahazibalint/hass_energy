@@ -124,6 +124,12 @@
       },
       "feed_in_price": {
         "name": "Current feed-in price"
+      },
+      "grid_cost": {
+        "name": "Grid cost so far"
+      },
+      "export_compensation": {
+        "name": "Export compensation so far"
       }
     }
   },

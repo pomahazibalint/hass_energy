@@ -209,11 +209,22 @@ integration has already left. A schedule that cannot price the period makes the
 entities unavailable rather than reporting zero — unvaluable is not the same
 number as nothing.
 
-`unit_price` and `feed_in_price` exist for Home Assistant's own energy
-dashboard, which wants a price rather than a bill. The feed-in price is only
-what surplus beyond netting earns: under szaldó, feed-in that netting absorbs
-is worth the withdrawal it cancels, which a per-kWh price cannot say, so the
-surplus owed sensor remains the figure that matches the invoice.
+Home Assistant's own energy dashboard values each hour's energy at a price and
+sums the hours. Under szaldó no price can make that come out right: a kWh's
+worth depends on what the meters do months later, so any per-kWh valuation is
+order-dependent and does not reconcile with the invoice. `unit_price` and
+`feed_in_price` exist for the dashboard's price option anyway, and are honest
+under gross settlement.
+
+`grid_cost` and `export_compensation` are what to point the dashboard at under
+szaldó, through its "entity tracking the total costs" option. They are running
+totals of the bill, so each hour's figure is the change in the bill that hour
+and the hours sum to the invoice by construction. An hour in which export
+cancels earlier import is a negative cost, which is the truth of netting. They
+report in Home Assistant's configured currency, which is what the dashboard
+labels costs in, and carry `last_reset` at the period start so that closing a
+settlement reads as a new period rather than a negative cost. The standing
+charge is left out: it is owed however the meters move.
 
 Testing needs Home Assistant, so those tests live in `tests/integration` and run
 in the workflow job that installs it. The engine's own tests need nothing and

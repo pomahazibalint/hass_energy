@@ -41,6 +41,14 @@ period** action with the figures from your last invoice, or it will account
 from zero for a period that began months ago. Past invoices can be brought in
 with **Import a settled invoice**, which records them as long-term statistics.
 
+For Home Assistant's energy dashboard, set the grid consumption and return
+sources to **use an entity tracking the total costs** and pick **Grid cost so
+far** and **Export compensation so far**. Those follow the bill exactly, so the
+hours add up to the invoice; under szaldó an hour of export that cancels
+earlier import shows as a negative cost. **Current unit price** and **Current
+feed-in price** serve the dashboard's price option instead, which is only a
+true figure under gross settlement.
+
 ## Quick start
 
 ```sh

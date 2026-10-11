@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -21,6 +22,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from . import SettlementEntry
 from .const import DOMAIN
@@ -39,6 +41,10 @@ class SettlementSensorDescription(SensorEntityDescription):
     monetary: bool = False
     #: A price rather than an amount, so the unit carries the kWh.
     per_kwh: bool = False
+    #: A running total for the energy dashboard. It reports in Home Assistant's
+    #: own currency, which is what the dashboard labels costs in, and resets
+    #: with the settlement period rather than dropping to zero.
+    running_total: bool = False
 
 
 SENSORS: tuple[SettlementSensorDescription, ...] = (
@@ -150,6 +156,28 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         per_kwh=True,
         value=lambda c: c.current_feed_in_price(),
     ),
+    # Prices cannot give the dashboard a true figure under szaldó, where the
+    # worth of a kWh depends on what the meters do months later. These can:
+    # each hour's cost is the change in the bill that hour, so the hours sum
+    # to the invoice by construction. Point the dashboard's "use an entity
+    # tracking the total costs" option at them. Hours in which export cancels
+    # earlier import show as negative, which is the truth of netting.
+    SettlementSensorDescription(
+        key="grid_cost",
+        translation_key="grid_cost",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        running_total=True,
+        value=lambda c: round(c.data.energy_gross, 2),
+    ),
+    SettlementSensorDescription(
+        key="export_compensation",
+        translation_key="export_compensation",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        running_total=True,
+        value=lambda c: c.data.surplus_net,
+    ),
 )
 
 
@@ -178,7 +206,9 @@ class SettlementSensor(CoordinatorEntity[SettlementCoordinator], SensorEntity):
         self.entity_description = description
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
         currency = terms_from_options(entry.options).currency
-        if description.monetary:
+        if description.running_total:
+            self._attr_native_unit_of_measurement = coordinator.hass.config.currency
+        elif description.monetary:
             self._attr_native_unit_of_measurement = currency
         elif description.per_kwh:
             self._attr_native_unit_of_measurement = f"{currency}/{KWH}"
@@ -186,6 +216,18 @@ class SettlementSensor(CoordinatorEntity[SettlementCoordinator], SensorEntity):
     @property
     def native_value(self) -> float | int:
         return self.entity_description.value(self.coordinator)
+
+    @property
+    def last_reset(self) -> datetime | None:
+        """When the running totals last started from zero.
+
+        Closing a settlement moves it, which tells the recorder the drop to
+        zero is a new period rather than a negative cost.
+        """
+
+        if not self.entity_description.running_total:
+            return None
+        return dt_util.start_of_local_day(self.coordinator.state.start)
 
     @property
     def extra_state_attributes(self) -> dict[str, str] | None:

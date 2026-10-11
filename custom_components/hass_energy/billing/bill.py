@@ -128,6 +128,18 @@ class Bill:
         return sum(line.net for line in (*self.subsidized, *self.market))
 
     @property
+    def energy_gross(self) -> float:
+        """The energy charge with VAT on it: the part of the bill the meters move.
+
+        Unrounded, unlike the invoice totals, because it is a running figure
+        whose hourly changes are what matter, and rounding each one would
+        drift. The standing charge is left out: it is owed however the meters
+        move, so it belongs to the period, not to any hour of it.
+        """
+
+        return self.energy_net * (1 + self.vat_percent / 100)
+
+    @property
     def net_total(self) -> float:
         return self.energy_net + self.standing_charge_net
 

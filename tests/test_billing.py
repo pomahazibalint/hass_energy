@@ -135,6 +135,13 @@ def test_vat_is_applied_to_energy_and_standing_charge_together() -> None:
     assert bill.vat == forint(net * 0.27)
 
 
+def test_the_energy_charge_carries_its_own_vat_but_not_the_standing_charge() -> None:
+    bill = settle(imported=1000)
+
+    assert bill.energy_gross == pytest.approx(1000 * 36.386 * 1.27)
+    assert settle(imported=0).energy_gross == 0
+
+
 def test_the_surplus_is_not_deducted_from_the_amount_payable() -> None:
     bill = settle(imported=0, exported=1000)
 

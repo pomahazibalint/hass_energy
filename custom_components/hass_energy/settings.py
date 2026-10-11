@@ -11,6 +11,8 @@ from collections.abc import Mapping
 from datetime import date
 from typing import Any
 
+from homeassistant.util import dt as dt_util
+
 from .billing import AllowanceBasis, Prices, PriceSchedule, SettlementMode, TariffTerms
 from .const import (
     CONF_ALLOWANCE_BASIS,
@@ -78,7 +80,10 @@ def standing_charge_months(options: Mapping[str, Any]) -> int:
 def schedule_from_options(options: Mapping[str, Any]) -> PriceSchedule:
     """Read the price schedule out of the entry options."""
 
-    rows = options.get(CONF_PRICES) or default_prices(date.today())
+    # Home Assistant's clock, not the host's: the rest of the integration dates
+    # energy by it, and a schedule starting on a different day would not cover
+    # the energy recorded against that date.
+    rows = options.get(CONF_PRICES) or default_prices(dt_util.now().date())
     return PriceSchedule(
         [
             Prices(

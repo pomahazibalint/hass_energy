@@ -90,6 +90,9 @@ class Bill:
     readings: MeterReadings
     billed_kwh: float
     allowance_kwh: float
+    #: What has eaten into the allowance: the subsidized energy, plus under the
+    #: gross basis the withdrawal that netting removed before billing.
+    allowance_used_kwh: float = 0.0
     subsidized: tuple[Line, ...] = field(default_factory=tuple)
     market: tuple[Line, ...] = field(default_factory=tuple)
     standing_charge_months: int = 0
@@ -105,6 +108,17 @@ class Bill:
     @property
     def market_kwh(self) -> float:
         return sum(line.kwh for line in self.market)
+
+    @property
+    def allowance_remaining_kwh(self) -> float:
+        """Subsidized energy still to be had, on whichever basis applies.
+
+        Not simply the allowance less the subsidized lines: under the gross
+        basis a household can have exhausted the allowance on withdrawal while
+        its netted consumption is still small.
+        """
+
+        return max(self.allowance_kwh - self.allowance_used_kwh, 0.0)
 
     @property
     def energy_net(self) -> float:

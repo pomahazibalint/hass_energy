@@ -181,6 +181,26 @@ async def test_changing_the_contract_revalues_the_same_quantities(
     assert after.data.energy_net != charged_before
 
 
+async def test_the_marginal_price_follows_the_allowance_basis(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Under the gross basis withdrawal alone can exhaust the allowance."""
+
+    # 3 000 withdrawn against 2 800 fed in: 200 billed, far inside the
+    # allowance on the netted basis, but 3 000 withdrawn is past it.
+    await move(hass, IMPORT_ENTITY, 4000.0)
+    await move(hass, EXPORT_ENTITY, 4800.0)
+    assert coordinator(entry).current_unit_price() == 40.0
+
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, CONF_ALLOWANCE_BASIS: "gross"}
+    )
+    await hass.async_block_till_done()
+
+    assert coordinator(entry).current_unit_price() == 80.0
+    assert coordinator(entry).data.allowance_remaining_kwh == 0
+
+
 async def test_a_backdated_price_revalues_history(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:

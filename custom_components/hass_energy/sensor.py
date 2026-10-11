@@ -81,7 +81,7 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         translation_key="allowance_remaining",
         native_unit_of_measurement=KWH,
         state_class=SensorStateClass.MEASUREMENT,
-        value=lambda c: round(max(c.data.allowance_kwh - c.data.subsidized_kwh, 0.0), 3),
+        value=lambda c: round(c.data.allowance_remaining_kwh, 3),
     ),
     SettlementSensorDescription(
         key="energy_cost",

@@ -268,7 +268,7 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         schedule = schedule_from_options(self.entry.options)
         prices = schedule.at(max(day, schedule.entries[0].valid_from))
         bill = self.data
-        if bill is not None and bill.billed_kwh >= bill.allowance_kwh:
+        if bill is not None and bill.allowance_remaining_kwh <= 0:
             return prices.market
         return prices.subsidized
 

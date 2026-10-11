@@ -85,6 +85,8 @@ def test_the_gross_basis_leaves_nothing_for_netted_consumption() -> None:
     assert bill.subsidized_kwh == 0
     assert bill.market_kwh == 500
     assert bill.energy_net == pytest.approx(500 * 70.104)
+    # Nothing left, although no subsidized line was ever written.
+    assert bill.allowance_remaining_kwh == 0
 
 
 def test_the_netted_basis_subsidizes_the_same_consumption() -> None:
@@ -93,6 +95,19 @@ def test_the_netted_basis_subsidizes_the_same_consumption() -> None:
     assert bill.billed_kwh == 500
     assert bill.subsidized_kwh == 500
     assert bill.market_kwh == 0
+    assert bill.allowance_remaining_kwh == pytest.approx(2523 - 500)
+
+
+def test_the_gross_basis_spends_the_allowance_before_the_billed_energy() -> None:
+    """Withdrawal within the allowance leaves the rest of it for netted consumption."""
+
+    terms = TariffTerms(allowance_basis=AllowanceBasis.GROSS)
+
+    bill = settle(imported=2000, exported=1500, terms=terms)
+
+    assert bill.billed_kwh == 500
+    assert bill.subsidized_kwh == 500
+    assert bill.allowance_remaining_kwh == pytest.approx(2523 - 2000)
 
 
 def test_gross_settlement_bills_everything_and_buys_everything() -> None:

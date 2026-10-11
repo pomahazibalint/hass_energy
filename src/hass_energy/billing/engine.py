@@ -137,6 +137,7 @@ def calculate(
         readings=readings,
         billed_kwh=billed_kwh,
         allowance_kwh=allowance_kwh,
+        allowance_used_kwh=used_elsewhere + subsidized_kwh,
         subsidized=tuple(subsidized_lines),
         market=tuple(market_lines),
         standing_charge_months=standing_charge_months,

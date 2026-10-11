@@ -121,6 +121,9 @@
       },
       "unit_price": {
         "name": "Current unit price"
+      },
+      "feed_in_price": {
+        "name": "Current feed-in price"
       }
     }
   },

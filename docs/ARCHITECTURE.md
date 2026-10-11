@@ -209,8 +209,11 @@ integration has already left. A schedule that cannot price the period makes the
 entities unavailable rather than reporting zero — unvaluable is not the same
 number as nothing.
 
-`unit_price` exists for Home Assistant's own energy dashboard, which wants a
-price rather than a bill.
+`unit_price` and `feed_in_price` exist for Home Assistant's own energy
+dashboard, which wants a price rather than a bill. The feed-in price is only
+what surplus beyond netting earns: under szaldó, feed-in that netting absorbs
+is worth the withdrawal it cancels, which a per-kWh price cannot say, so the
+surplus owed sensor remains the figure that matches the invoice.
 
 Testing needs Home Assistant, so those tests live in `tests/integration` and run
 in the workflow job that installs it. The engine's own tests need nothing and

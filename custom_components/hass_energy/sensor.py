@@ -141,6 +141,15 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         per_kwh=True,
         value=lambda c: c.current_unit_price(),
     ),
+    # And its "return to grid" price. Only the surplus beyond netting earns
+    # this, so under szaldó the surplus owed sensor is what matches the bill.
+    SettlementSensorDescription(
+        key="feed_in_price",
+        translation_key="feed_in_price",
+        state_class=SensorStateClass.MEASUREMENT,
+        per_kwh=True,
+        value=lambda c: c.current_feed_in_price(),
+    ),
 )
 
 

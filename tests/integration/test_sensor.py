@@ -25,6 +25,8 @@ async def test_every_line_of_the_settlement_is_an_entity(
         "surplus_owed",
         "net_position",
         "settlement_period_length",
+        "current_unit_price",
+        "current_feed_in_price",
     ):
         assert hass.states.get(PREFIX + key) is not None, key
 
@@ -101,3 +103,26 @@ async def test_the_payable_line_carries_the_period_it_covers(
     assert "period_start" in attributes
     assert "days_elapsed" in attributes
     assert "imported_kwh" in attributes
+
+
+async def test_the_feed_in_price_is_the_rate_in_force_per_kwh(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """A price for the energy dashboard's return-to-grid option, not a bill."""
+
+    state = hass.states.get(PREFIX + "current_feed_in_price")
+
+    assert state is not None
+    assert float(state.state) == 6.0
+    assert state.attributes["unit_of_measurement"] == "Ft/kWh"
+
+
+async def test_the_feed_in_price_follows_a_price_change(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    prices = [*entry.options[CONF_PRICES]]
+    prices[-1] = {**prices[-1], "feed_in": 7.5}
+    hass.config_entries.async_update_entry(entry, options={**entry.options, CONF_PRICES: prices})
+    await hass.async_block_till_done()
+
+    assert float(hass.states.get(PREFIX + "current_feed_in_price").state) == 7.5  # type: ignore[union-attr]

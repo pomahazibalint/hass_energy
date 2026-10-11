@@ -21,7 +21,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from . import issues
-from .billing import Bill, MeterReadings, SettlementPeriod, calculate
+from .billing import Bill, MeterReadings, Prices, SettlementPeriod, calculate
 from .const import (
     CONF_EXPORT_ENTITY,
     CONF_IMPORT_ENTITY,
@@ -264,13 +264,28 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         wants a price rather than a bill.
         """
 
-        day = today or dt_util.now().date()
-        schedule = schedule_from_options(self.entry.options)
-        prices = schedule.at(max(day, schedule.entries[0].valid_from))
+        prices = self._prices_today(today)
         bill = self.data
         if bill is not None and bill.allowance_remaining_kwh <= 0:
             return prices.market
         return prices.subsidized
+
+    def current_feed_in_price(self, today: date | None = None) -> float:
+        """What the supplier pays for the next kWh fed in beyond netting.
+
+        The counterpart of ``current_unit_price`` for the energy dashboard's
+        return-to-grid price. Under szaldó it is the price of surplus only:
+        feed-in that netting absorbs is worth the withdrawal it cancels, which
+        the dashboard cannot express, so the surplus owed sensor is the figure
+        that matches the invoice.
+        """
+
+        return self._prices_today(today).feed_in
+
+    def _prices_today(self, today: date | None = None) -> Prices:
+        day = today or dt_util.now().date()
+        schedule = schedule_from_options(self.entry.options)
+        return schedule.at(max(day, schedule.entries[0].valid_from))
 
     def seed(
         self, period_start: date, imported: float, exported: float, today: date | None = None

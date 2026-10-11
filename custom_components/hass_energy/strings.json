@@ -35,9 +35,11 @@
           "standing_charge_per_month": "Standing charge per month, net",
           "standing_charge_months": "Standing charge months per settlement",
           "vat_percent": "VAT (%)",
-          "currency": "Currency"
+          "currency": "Currency",
+          "max_step_kwh": "Largest believable movement per reading (kWh)"
         },
         "data_description": {
+          "max_step_kwh": "A reading that moves more than this is held back until a second reading agrees with it. Catches an inverter reporting its lifetime total as one step. Zero disables the check.",
           "allowance_basis": "Whether the allowance is spent by everything withdrawn, or only by what is left after generation is netted off. The two differ sharply for a household that both draws and generates a lot.",
           "mode": "Szaldó nets generation against consumption. It closes ten years after commissioning, after which settlement is gross."
         }

@@ -29,7 +29,12 @@ from .const import (
     STORAGE_KEY,
     STORAGE_VERSION,
 )
-from .settings import schedule_from_options, standing_charge_months, terms_from_options
+from .settings import (
+    max_step_kwh,
+    schedule_from_options,
+    standing_charge_months,
+    terms_from_options,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,6 +69,9 @@ class PeriodState:
     buckets: dict[str, Bucket] = field(default_factory=dict)
     last_import: float | None = None
     last_export: float | None = None
+    #: A reading held back as implausible, waiting for a second one to agree.
+    pending_import: float | None = None
+    pending_export: float | None = None
 
     @property
     def imported(self) -> float:
@@ -78,6 +86,8 @@ class PeriodState:
             "period_start": self.start.isoformat(),
             "last_import": self.last_import,
             "last_export": self.last_export,
+            "pending_import": self.pending_import,
+            "pending_export": self.pending_export,
             "buckets": {
                 key: {"imported": bucket.imported, "exported": bucket.exported}
                 for key, bucket in self.buckets.items()
@@ -94,6 +104,8 @@ class PeriodState:
             },
             last_import=raw.get("last_import"),
             last_export=raw.get("last_export"),
+            pending_import=raw.get("pending_import"),
+            pending_export=raw.get("pending_export"),
         )
 
 
@@ -163,35 +175,21 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         if reading is None:
             return
 
+        limit = max_step_kwh(self.entry.options)
+        state = self.state
         if entity_id == self.import_entity:
-            delta, self.state.last_import = self._movement(self.state.last_import, reading)
+            delta, state.last_import, state.pending_import = movement(
+                state.last_import, reading, state.pending_import, limit
+            )
             self._bucket().imported += delta
         else:
-            delta, self.state.last_export = self._movement(self.state.last_export, reading)
+            delta, state.last_export, state.pending_export = movement(
+                state.last_export, reading, state.pending_export, limit
+            )
             self._bucket().exported += delta
 
         self._store.async_delay_save(self.state.as_dict, SAVE_DELAY)
         self.refresh_settlement()
-
-    @staticmethod
-    def _movement(previous: float | None, reading: float) -> tuple[float, float | None]:
-        """How much the meter moved, and where the baseline now stands.
-
-        A reading far below the last one means the source restarted its total,
-        so the new reading is the movement rather than a negative quantity. A
-        reading only slightly below it is a glitch — a reconnect replaying a
-        stale value, a wobble in the last digit — and is ignored, baseline and
-        all: taken for a restart it would add the meter's whole lifetime total
-        to the period, and the delayed save would make that permanent.
-        """
-
-        if previous is None:
-            return 0.0, reading
-        if reading >= previous:
-            return reading - previous, reading
-        if reading >= previous * RESTART_BELOW:
-            return 0.0, previous
-        return reading, reading
 
     def _bucket(self, today: date | None = None) -> Bucket:
         """The bucket for the prices in force today."""
@@ -417,3 +415,41 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             if share:
                 carried[key] = Bucket(bucket.imported * share, bucket.exported * share)
         return carried
+
+
+def movement(
+    previous: float | None, reading: float, pending: float | None, limit: float
+) -> tuple[float, float | None, float | None]:
+    """How much a meter moved, where its baseline now stands, and what is held.
+
+    A reading far below the last one means the source restarted its total, so
+    the reading itself is the movement. A reading only slightly below it is a
+    glitch — a reconnect replaying a stale value, a wobble in the last digit —
+    and is ignored, baseline and all.
+
+    A movement larger than ``limit`` in either direction is not believed on
+    its own. Inverters are known to report their lifetime total as a single
+    step, usually when powering on or off, and sometimes to revert just as
+    suddenly; counted, that would add years of energy to the period, and the
+    delayed save would make it permanent. The baseline is held instead and the
+    reading remembered. If the next reading agrees with it, the new level is
+    real and becomes the baseline without the jump being counted; if the
+    source has already come back, the baseline was never disturbed. A limit of
+    zero or below disables the check.
+    """
+
+    if previous is None:
+        return 0.0, reading, None
+
+    if reading >= previous:
+        step = reading - previous
+        if limit <= 0 or step <= limit:
+            return step, reading, None
+    elif reading >= previous * RESTART_BELOW:
+        return 0.0, previous, None
+    elif limit <= 0 or reading <= limit:
+        return reading, reading, None
+
+    if pending is not None and abs(reading - pending) <= limit:
+        return 0.0, reading, None
+    return 0.0, previous, reading

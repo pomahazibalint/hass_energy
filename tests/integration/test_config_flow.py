@@ -194,6 +194,7 @@ async def test_the_allowance_basis_is_switchable(
             "standing_charge_months": 12,
             "vat_percent": 27.0,
             "currency": "Ft",
+            "max_step_kwh": 500.0,
         },
     )
 

@@ -5,12 +5,13 @@ from custom_components.hass_energy.billing import forint
 from custom_components.hass_energy.const import (
     ATTR_READING_DATE,
     CONF_ALLOWANCE_BASIS,
+    CONF_MAX_STEP_KWH,
     CONF_MODE,
     CONF_PRICES,
     DOMAIN,
     SERVICE_CLOSE_SETTLEMENT,
 )
-from custom_components.hass_energy.coordinator import SettlementCoordinator
+from custom_components.hass_energy.coordinator import SettlementCoordinator, movement
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -25,6 +26,13 @@ def coordinator(entry: MockConfigEntry) -> SettlementCoordinator:
 
 async def move(hass: HomeAssistant, entity: str, value: float) -> None:
     hass.states.async_set(entity, str(value))
+    await hass.async_block_till_done()
+
+
+async def limit_steps(hass: HomeAssistant, entry: MockConfigEntry, limit: float) -> None:
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, CONF_MAX_STEP_KWH: limit}
+    )
     await hass.async_block_till_done()
 
 
@@ -84,6 +92,75 @@ async def test_the_baseline_waits_out_a_glitch(
 
     assert coordinator(entry).state.last_import == 1010.0
     assert coordinator(entry).state.imported == 10.0
+
+
+async def test_a_lifetime_total_dumped_as_one_reading_is_not_counted(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """An inverter that reports years of energy as a single step, then recovers."""
+
+    await limit_steps(hass, entry, 500.0)
+    await move(hass, IMPORT_ENTITY, 1010.0)
+    await move(hass, IMPORT_ENTITY, 24010.0)
+    await move(hass, IMPORT_ENTITY, 1011.0)
+
+    state = coordinator(entry).state
+    assert state.imported == 11.0
+    assert state.last_import == 1011.0
+    assert state.pending_import is None
+
+
+async def test_a_jump_that_persists_becomes_the_baseline_without_being_counted(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    await limit_steps(hass, entry, 500.0)
+    await move(hass, IMPORT_ENTITY, 1010.0)
+    await move(hass, IMPORT_ENTITY, 24010.0)
+    assert coordinator(entry).state.pending_import == 24010.0
+    await move(hass, IMPORT_ENTITY, 24010.5)
+    await move(hass, IMPORT_ENTITY, 24012.5)
+
+    state = coordinator(entry).state
+    assert state.imported == 12.0
+    assert state.last_import == 24012.5
+
+
+async def test_a_counter_that_drops_to_zero_and_returns_counts_nothing_twice(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    await limit_steps(hass, entry, 500.0)
+    await move(hass, IMPORT_ENTITY, 1010.0)
+    await move(hass, IMPORT_ENTITY, 0.0)
+    await move(hass, IMPORT_ENTITY, 1010.2)
+    await move(hass, IMPORT_ENTITY, 1010.4)
+
+    assert coordinator(entry).state.imported == 10.0
+
+
+async def test_a_limit_of_zero_believes_everything(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    await limit_steps(hass, entry, 0.0)
+
+    await move(hass, IMPORT_ENTITY, 1010.0)
+    await move(hass, IMPORT_ENTITY, 24010.0)
+
+    assert coordinator(entry).state.imported == 23010.0
+
+
+def test_movement_rules() -> None:
+    # Ordinary movement, a dip, and a restart near zero.
+    assert movement(100.0, 105.0, None, 500.0) == (5.0, 105.0, None)
+    assert movement(100.0, 99.5, None, 500.0) == (0.0, 100.0, None)
+    assert movement(100.0, 4.0, None, 500.0) == (4.0, 4.0, None)
+    # A step beyond the limit is held, then accepted once a reading agrees.
+    assert movement(100.0, 5100.0, None, 500.0) == (0.0, 100.0, 5100.0)
+    assert movement(100.0, 5101.0, 5100.0, 500.0) == (0.0, 5101.0, None)
+    # A restart to a level beyond the limit is held the same way.
+    assert movement(23000.0, 20000.0, None, 500.0) == (0.0, 23000.0, 20000.0)
+    assert movement(23000.0, 20000.3, 20000.0, 500.0) == (0.0, 20000.3, None)
+    # The source coming back clears what was held.
+    assert movement(100.0, 101.0, 5100.0, 500.0) == (1.0, 101.0, None)
 
 
 async def test_unusable_readings_are_ignored(

@@ -201,6 +201,16 @@ Past invoices go in through `import_invoice`, which writes them to the recorder
 as external statistics. Home Assistant never saw those years, so nothing else
 can supply them, and without it a fresh install has no history at all.
 
+A meter's movement is believed within limits. A reading slightly below the
+last one is a glitch and ignored; one far below it is a restart, and the
+reading is the movement. A movement larger than the configured step, in either
+direction, is held back until a second reading agrees with it, because
+inverters are known to report their lifetime total as a single step when they
+power on or off and to revert just as suddenly. Counted, that would add years
+of energy to the period, and the delayed save would make it permanent. A
+reading held back costs nothing when the source comes back; one that persists
+becomes the baseline without the jump itself being counted.
+
 Problems are repair issues rather than binary sensors: a price schedule that no
 longer reaches the start of the period, a settlement running far past a year
 with no reading recorded, a source that has stopped reporting. The checks run

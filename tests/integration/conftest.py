@@ -13,6 +13,7 @@ import pytest
 from custom_components.hass_energy.const import (
     CONF_EXPORT_ENTITY,
     CONF_IMPORT_ENTITY,
+    CONF_MAX_STEP_KWH,
     CONF_PRICES,
     DOMAIN,
 )
@@ -51,7 +52,9 @@ async def entry(
         domain=DOMAIN,
         title="Test settlement",
         data={CONF_IMPORT_ENTITY: IMPORT_ENTITY, CONF_EXPORT_ENTITY: EXPORT_ENTITY},
-        options={CONF_PRICES: prices},
+        # The tests move a meter by a whole invoice in one step, which the
+        # glitch guard would otherwise hold back. Its own tests set the limit.
+        options={CONF_PRICES: prices, CONF_MAX_STEP_KWH: 100000.0},
     )
     config_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(config_entry.entry_id)

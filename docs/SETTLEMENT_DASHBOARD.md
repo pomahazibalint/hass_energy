@@ -1,5 +1,13 @@
 # Settlement dashboard
 
+Status, 12 October 2026: the first release below, house consumption and
+solar value, is implemented on `main` and not yet released. The three that
+follow are not started. Two things the implementation settled that the
+plan had left open: the house's figures begin only where the grid record
+and every named household source exist, and an hour that carries the seeded
+remainder is left out of every statistic; both are recorded in "Sources"
+and "Edge cases" below.
+
 A plan to give the integration the figures Home Assistant's energy dashboard
 cannot produce, and a dashboard of its own that shows them beside the parts of
 the native one worth keeping. It follows the recorder-backed settlement in
@@ -288,15 +296,16 @@ one install is simpler than two and the module is small.
 
 Each release leaves the previous one's entities and statistics working.
 
-House consumption and solar value. The reader grows to the preferences'
-sources, the two consumption statistics and the solar value statistic and
-sensor appear, and the alignment repair with them. Nothing in the frontend;
-the figures show in the native dashboard's own cards and statistics graphs,
-which is the first test of whether they are the right figures.
+House consumption and solar value. Done. The reader grows to the
+preferences' sources, the two consumption statistics and the solar value
+statistic and sensor appear, and the alignment repair with them. Nothing in
+the frontend; the figures show in the native dashboard's own cards and
+statistics graphs, which is the first test of whether they are the right
+figures.
 
-Consumption cost and devices. The engine gains the hourly consumption cost,
-the integration the per-device statistics and sensors, and the diagnostics
-the device shares.
+Consumption cost and devices. Next. The engine gains the hourly consumption
+cost, the integration the per-device statistics and sensors, and the
+diagnostics the device shares.
 
 Projections. The daily reader, the seasonal projection and its sensors, and
 the battery what-if with its options.

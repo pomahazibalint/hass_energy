@@ -10,7 +10,13 @@ from custom_components.hass_energy.const import (
     DOMAIN,
     SERVICE_CLOSE_SETTLEMENT,
 )
-from custom_components.hass_energy.costs import EXPORT_COMPENSATION, GRID_COST, statistic_id
+from custom_components.hass_energy.costs import (
+    COST_KINDS,
+    EXPORT_COMPENSATION,
+    GRID_COST,
+    HOUSEHOLD_KINDS,
+    statistic_id,
+)
 from custom_components.hass_energy.settings import price_entry
 from homeassistant.components.recorder.statistics import (
     get_metadata,
@@ -27,9 +33,11 @@ from .conftest import (
     DAY_START,
     EXPORT_ENTITY,
     IMPORT_ENTITY,
+    PRODUCTION_ENTITY,
     TODAY,
     coordinator,
     local_midnight,
+    name_sources,
     record,
     refresh,
 )
@@ -180,16 +188,23 @@ async def test_unchanged_hours_are_not_rewritten(
 async def test_removing_the_entry_removes_its_statistics(
     entry: MockConfigEntry, hass: HomeAssistant
 ) -> None:
+    await name_sources(hass, solar=[PRODUCTION_ENTITY])
     await record(hass, IMPORT_ENTITY, DAY_START, [10.0])
+    await record(hass, PRODUCTION_ENTITY, DAY_START, [2.0])
     await refresh(hass, entry)
-    assert await rows(hass, entry, GRID_COST)
+    await async_wait_recording_done(hass)
+    every = {statistic_id(entry.entry_id, kind) for kind in (*COST_KINDS, *HOUSEHOLD_KINDS)}
+    written = await get_instance(hass).async_add_executor_job(
+        partial(get_metadata, hass, statistic_ids=every)
+    )
+    assert set(written) == every
 
     await hass.config_entries.async_remove(entry.entry_id)
     await hass.async_block_till_done()
     await async_wait_recording_done(hass)
 
     metadata = await get_instance(hass).async_add_executor_job(
-        partial(get_metadata, hass, statistic_ids={statistic_id(entry.entry_id, GRID_COST)})
+        partial(get_metadata, hass, statistic_ids=every)
     )
     assert metadata == {}
 

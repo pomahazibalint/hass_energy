@@ -250,6 +250,29 @@ move. The running-total sensors that preceded them are gone: an install
 upgrading from the release that retired them has their registry entries and
 the repair that named their successors removed at setup.
 
+The household's other sources come from the energy dashboard's own
+preferences, the document in which the user names a statistic for each flow,
+so a solar or battery source is named once, in the native settings, and
+never asked for again. They belong to the metering point whose import meter
+the dashboard's grid source names, so a second entry for a heat pump on its
+own tariff is not credited with panels that never fed it. They are read only
+where the grid record exists, and the house's figures run from the first
+hour every one of them covers: before that the house's flows are
+unknowable, not zero, and the house's sensors are unavailable.
+They do not touch the bill. They say what the house
+used, import plus production plus battery discharge less export less charge,
+and how much of its own generation it kept, both published as statistics the
+dashboard's cards can draw. An hour in which more energy left the house than
+entered it cannot have happened, so it is a source reporting in the wrong
+hour; the figure is published as zero and a repair names the hours and what
+they lost, because the native dashboard reads the same rows and overstates
+consumption by the same amount without saying so. What the panels were worth
+is the bill there would have been without them: the same hours with the
+kept production bought from the grid instead, settled by the same engine,
+which is the only way to value them under szaldó. A figure whose sources
+the household lacks is unavailable, and the statistics it would have had
+are removed when the source is dropped.
+
 Testing needs Home Assistant, so those tests live in `tests/integration` and run
 in the workflow job that installs it. They put hours into the recorder directly
 and run on a frozen clock. The engine's own tests need nothing and run

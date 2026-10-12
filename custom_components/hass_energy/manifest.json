@@ -8,6 +8,9 @@
   "dependencies": [
     "recorder"
   ],
+  "after_dependencies": [
+    "energy"
+  ],
   "documentation": "https://github.com/pomahazibalint/hass_energy",
   "integration_type": "service",
   "iot_class": "calculated",

@@ -124,6 +124,15 @@
       },
       "feed_in_price": {
         "name": "Current feed-in price"
+      },
+      "house_consumption": {
+        "name": "House consumption"
+      },
+      "self_consumed_solar": {
+        "name": "Self-consumed solar"
+      },
+      "solar_value": {
+        "name": "Solar value"
       }
     }
   },
@@ -195,6 +204,10 @@
     "source_unrecorded": {
       "title": "Energy source sensors have no statistics",
       "description": "The recorder has never compiled statistics for {entities}. The settlement is read from long-term statistics, so nothing from these sources counts until they are recorded with a total state class and a kWh unit."
+    },
+    "sources_disagree": {
+      "title": "Energy sources disagree in {hours} hours",
+      "description": "In {hours} hours of the settlement period more energy left the house than entered it, {lost_kwh} kWh in all, worst in the hour starting {worst}. That cannot happen, so a source is reporting in the wrong hour: an inverter that lags the grid meter, or a production meter that counts what charged the battery. The energy dashboard reads the same rows and overstates consumption by the same amount. Point the solar source at the inverter's own energy statistic, or exclude battery charging from it."
     }
   }
 }

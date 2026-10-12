@@ -39,6 +39,9 @@ class SettlementSensorDescription(SensorEntityDescription):
     monetary: bool = False
     #: A price rather than an amount, so the unit carries the kWh.
     per_kwh: bool = False
+    #: Whether the line can be answered at all. A figure whose sources the
+    #: household lacks is unavailable, not zero.
+    available: Callable[[SettlementCoordinator], bool] = lambda c: True
 
 
 SENSORS: tuple[SettlementSensorDescription, ...] = (
@@ -150,6 +153,35 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         per_kwh=True,
         value=lambda c: c.current_feed_in_price(),
     ),
+    # What the house did, from the sources the energy dashboard names. The
+    # bill does not need them; these answer what the household used and what
+    # its panels were worth, which the dashboard cannot say under szaldó.
+    SettlementSensorDescription(
+        key="house_consumption",
+        translation_key="house_consumption",
+        native_unit_of_measurement=KWH,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL,
+        available=lambda c: c.house_since() is not None,
+        value=lambda c: round(c.household_consumption_kwh(), 3),
+    ),
+    SettlementSensorDescription(
+        key="self_consumed_solar",
+        translation_key="self_consumed_solar",
+        native_unit_of_measurement=KWH,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL,
+        available=lambda c: bool(c.sources.production) and c.house_since() is not None,
+        value=lambda c: round(c.household_solar_kept_kwh(), 3),
+    ),
+    SettlementSensorDescription(
+        key="solar_value",
+        translation_key="solar_value",
+        state_class=SensorStateClass.TOTAL,
+        monetary=True,
+        available=lambda c: c.solar_value_total() is not None,
+        value=lambda c: c.solar_value_total() or 0,
+    ),
 )
 
 
@@ -182,6 +214,10 @@ class SettlementSensor(CoordinatorEntity[SettlementCoordinator], SensorEntity):
             self._attr_native_unit_of_measurement = currency
         elif description.per_kwh:
             self._attr_native_unit_of_measurement = f"{currency}/{KWH}"
+
+    @property
+    def available(self) -> bool:
+        return super().available and self.entity_description.available(self.coordinator)
 
     @property
     def native_value(self) -> float | int:

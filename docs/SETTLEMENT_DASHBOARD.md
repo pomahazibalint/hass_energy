@@ -72,7 +72,22 @@ a source added in the native settings is picked up on the next refresh.
 A feature whose sources are absent is absent: no solar source, no solar
 value, no self-consumption. Absence is not an error and raises nothing. A
 source that is named but has no statistics is the existing unrecorded
-repair, extended to cover these sources.
+repair, extended to cover these sources. The preferences are the
+household's and an entry is a metering point, so the sources go to the entry
+whose import meter the dashboard's grid source names; a second metering
+point gets none of them.
+
+The grid meters are the record. The other sources are read only where it
+exists, and the house's figures run from the first hour every one of them
+covers as well: an inverter recorded before the grid meters says nothing
+about hours the grid did not report, one recorded after them says nothing
+about the hours before it, and a second inverter that began later leaves
+the hours before it unknown. Before that hour the house's flows are
+unknowable, which is not zero, so the house's sensors are unavailable,
+nothing of the house is published for those hours and the disagreement
+finding does not look at them. An hour that carries the seeded remainder,
+which happens only when the record begins on the period's first hour, is
+left out of every statistic: what it holds is the invoice's, not the hour's.
 
 Everything is read as the two meters are read, by statistic id through
 `statistics_during_period`, requesting the hourly change in kWh. External

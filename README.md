@@ -54,6 +54,15 @@ export that cancels earlier import shows as a negative cost. **Current unit
 price** and **Current feed-in price** serve the dashboard's price option
 instead, which is only a true figure under gross settlement.
 
+The solar and battery sources named in the dashboard's settings are read from
+there. From them the integration publishes **house consumption** and
+**self-consumed solar** statistics, and a **Solar value** sensor and
+statistic: what the bill would have been without the panels, less what it is.
+A repair issue reports hours in which more energy left the house than entered
+it, which is a source reporting in the wrong hour; the native dashboard reads
+the same rows and overstates consumption by the same amount without saying
+so.
+
 ## Quick start
 
 ```sh

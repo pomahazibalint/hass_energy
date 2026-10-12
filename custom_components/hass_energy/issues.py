@@ -6,10 +6,11 @@ rather than as binary sensors nobody has put on a dashboard yet.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 
@@ -109,6 +110,32 @@ def source_unrecorded(hass: HomeAssistant, entry_id: str, unrecorded: list[str])
         active=bool(unrecorded),
         severity=ir.IssueSeverity.ERROR,
         placeholders={"entities": ", ".join(unrecorded)},
+    )
+
+
+def sources_disagree(
+    hass: HomeAssistant, entry_id: str, hours: int, lost_kwh: float, worst: datetime | None
+) -> None:
+    """Energy left the house in hours it never entered it.
+
+    That cannot happen, so a source is reporting in the wrong hour: an
+    inverter that lags the grid meter, or a production meter that counts what
+    charged the battery. The native dashboard reads the same rows and
+    overstates consumption by the same amount, so the user is told rather
+    than the figure smoothed.
+    """
+
+    _set(
+        hass,
+        entry_id,
+        "sources_disagree",
+        active=hours > 0,
+        placeholders={
+            "hours": str(hours),
+            "lost_kwh": f"{lost_kwh:.1f}",
+            # The dashboard the text sends the user to shows local hours.
+            "worst": dt_util.as_local(worst).isoformat(timespec="minutes") if worst else "",
+        },
     )
 
 

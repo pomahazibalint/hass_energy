@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from .bill import Bill, Line, MeterReadings, SettlementPeriod, SurplusLine, forint
 from .engine import calculate
+from .flows import Flows, solar_value
 from .prices import Prices, PriceSchedule, Segment
 from .series import Hour, HourCost, allocate
 from .terms import AllowanceBasis, SettlementMode, TariffTerms
@@ -25,6 +26,7 @@ from .terms import AllowanceBasis, SettlementMode, TariffTerms
 __all__ = [
     "AllowanceBasis",
     "Bill",
+    "Flows",
     "Hour",
     "HourCost",
     "Line",
@@ -39,4 +41,5 @@ __all__ = [
     "allocate",
     "calculate",
     "forint",
+    "solar_value",
 ]

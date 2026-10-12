@@ -23,6 +23,7 @@ from custom_components.hass_energy.const import (
 from custom_components.hass_energy.coordinator import SettlementCoordinator
 from custom_components.hass_energy.settings import price_entry
 from freezegun.api import FrozenDateTimeFactory
+from homeassistant.components.energy.data import async_get_manager
 from homeassistant.components.recorder import Recorder
 from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
 from homeassistant.components.recorder.models.statistics import StatisticMeanType
@@ -36,6 +37,9 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
 
 IMPORT_ENTITY = "sensor.grid_import_energy"
 EXPORT_ENTITY = "sensor.grid_export_energy"
+PRODUCTION_ENTITY = "sensor.solar_production_energy"
+BATTERY_CHARGE_ENTITY = "sensor.battery_charge_energy"
+BATTERY_DISCHARGE_ENTITY = "sensor.battery_discharge_energy"
 
 #: The test instance runs on US/Pacific. 20:00 UTC is 13:00 local, so the
 #: local day began at 07:00 UTC and thirteen complete hours of it exist.
@@ -135,4 +139,50 @@ async def refresh(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     """Re-derive the settlement, as the recorder's hourly compile would."""
 
     await coordinator(entry).async_refresh()
+    await hass.async_block_till_done()
+
+
+async def name_sources(
+    hass: HomeAssistant,
+    *,
+    solar: Sequence[str] = (),
+    battery: tuple[str, str] | None = None,
+    grid: str | None = None,
+) -> None:
+    """Name the household's sources as the energy dashboard's settings would.
+
+    ``battery`` is the charge and discharge statistics, in that order, and
+    ``grid`` the import meter the dashboard's grid source names. Saving the
+    preferences is what the dashboard does, so the integration hears about
+    it the same way.
+    """
+
+    sources: list[Any] = [
+        {"type": "solar", "stat_energy_from": source, "config_entry_solar_forecast": None}
+        for source in solar
+    ]
+    if grid:
+        sources.insert(
+            0,
+            {
+                "type": "grid",
+                "flow_from": [
+                    {
+                        "stat_energy_from": grid,
+                        "stat_cost": None,
+                        "entity_energy_price": None,
+                        "number_energy_price": None,
+                    }
+                ],
+                "flow_to": [],
+                "cost_adjustment_day": 0,
+            },
+        )
+    if battery:
+        charge, discharge = battery
+        sources.append(
+            {"type": "battery", "stat_energy_from": discharge, "stat_energy_to": charge}
+        )
+    manager = await async_get_manager(hass)
+    await manager.async_update({"energy_sources": sources})
     await hass.async_block_till_done()

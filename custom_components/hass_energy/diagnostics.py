@@ -46,10 +46,23 @@ async def async_get_config_entry_diagnostics(
             "first": (
                 coordinator.observed.first.isoformat() if coordinator.observed.first else None
             ),
+            "first_of": {
+                source: first.isoformat()
+                for source, first in coordinator.observed.first_of.items()
+            },
             "imported_kwh": coordinator.observed.imported_kwh,
             "exported_kwh": coordinator.observed.exported_kwh,
+            "produced_kwh": coordinator.observed.produced_kwh,
             "unrecorded": coordinator.observed.unrecorded,
         }
+
+    since = coordinator.house_since()
+    household = {
+        "since": since.isoformat() if since else None,
+        "consumption_kwh": coordinator.household_consumption_kwh(),
+        "solar_kept_kwh": coordinator.household_solar_kept_kwh(),
+        "solar_value": coordinator.solar_value_total(),
+    }
 
     return {
         # Entity ids are the user's own naming, so they are reported as
@@ -57,8 +70,21 @@ async def async_get_config_entry_diagnostics(
         "sources": {
             "import": coordinator.import_entity,
             "export": coordinator.export_entity,
+            "production": list(coordinator.sources.production),
+            "battery_charge": list(coordinator.sources.charge),
+            "battery_discharge": list(coordinator.sources.discharge),
             "missing": coordinator.missing_sources(),
         },
+        "disagreement": {
+            "hours": coordinator.disagreement.hours,
+            "lost_kwh": coordinator.disagreement.lost_kwh,
+            "worst": (
+                coordinator.disagreement.worst.isoformat()
+                if coordinator.disagreement.worst
+                else None
+            ),
+        },
+        "household": household,
         "period": coordinator.state.as_dict(),
         "observed": observed,
         "days_elapsed": coordinator.days_elapsed(),

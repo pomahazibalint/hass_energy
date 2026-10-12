@@ -64,11 +64,14 @@ problem entities.
 the integration reads the recorder rather than keeping its own record of
 energy, and the migration that got it there.
 
+[SETTLEMENT_DASHBOARD.md](SETTLEMENT_DASHBOARD.md) plans what comes next on
+the integration route: house consumption and solar value from the energy
+dashboard's own sources, cost per device, projections that follow last year's
+shape, a battery what-if, and a dashboard of the integration's own that shows
+them beside the native cards.
+
 ## Ideas backlog
-- Tariff plugins
-- Battery support
-- Dynamic pricing
-- Hourly solar-aware attribution
-- EV analytics
+- Tariff plugins, only when a second tariff arrives with a real user
+- EV analytics beyond the device cost the settlement dashboard plans
 
 This document is intended to be updated over multiple development sessions.

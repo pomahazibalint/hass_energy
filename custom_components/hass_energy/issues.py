@@ -112,18 +112,12 @@ def source_unrecorded(hass: HomeAssistant, entry_id: str, unrecorded: list[str])
     )
 
 
-def running_totals_retired(hass: HomeAssistant, entry_id: str, statistics: dict[str, str]) -> None:
-    """The running-total sensors have a successor; say where to point the dashboard.
+def running_totals_retired(hass: HomeAssistant, entry_id: str) -> None:
+    """Withdraw the notice that announced the running-total sensors' retirement.
 
-    An entity that silently disappears from a dashboard source is worse than
-    one that asks to be replaced, so the sensors stay one release and this
-    names the statistics that take their place.
+    It named the statistics that replaced them for one release; the sensors
+    are gone now, and a repair for an entity that no longer exists would only
+    puzzle whoever reads it.
     """
 
-    _set(
-        hass,
-        entry_id,
-        "running_totals_retired",
-        active=True,
-        placeholders=statistics,
-    )
+    _set(hass, entry_id, "running_totals_retired", active=False)

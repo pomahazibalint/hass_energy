@@ -12,6 +12,7 @@ from custom_components.hass_energy.const import (
     CONF_IMPORT_ENTITY,
     CONF_PRICES,
     DOMAIN,
+    RETIRED_SENSORS,
     SERVICE_IMPORT_INVOICE,
     SERVICE_SEED_PERIOD,
     STORAGE_KEY,
@@ -22,7 +23,9 @@ from custom_components.hass_energy.issues import OVERDUE_AFTER_DAYS
 from custom_components.hass_energy.settings import price_entry
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.components.recorder import Recorder
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.storage import Store
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -317,14 +320,42 @@ async def test_a_past_invoice_becomes_history(
     assert cost[cost_id][-1]["state"] == 1836.0
 
 
-async def test_the_retired_sensors_point_at_their_successors(
-    entry: MockConfigEntry, hass: HomeAssistant
+async def test_nothing_of_the_retired_sensors_survives_an_upgrade(
+    recorder_mock: Recorder,
+    enable_custom_integrations: None,
+    frozen: FrozenDateTimeFactory,
+    hass: HomeAssistant,
 ) -> None:
-    registry = ir.async_get(hass)
-    issue = registry.async_get_issue(DOMAIN, f"running_totals_retired_{entry.entry_id}")
+    """The running-total sensors and the repair that announced them are gone."""
 
-    assert issue is not None
-    assert issue.translation_placeholders == {
-        "grid_cost": statistic_id(entry.entry_id, "grid_cost"),
-        "export_compensation": statistic_id(entry.entry_id, "export_compensation"),
-    }
+    hass.states.async_set(IMPORT_ENTITY, "1000.0")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Test settlement",
+        data={CONF_IMPORT_ENTITY: IMPORT_ENTITY},
+        options={CONF_PRICES: [price_entry(date(2024, 1, 1), 36.386, 70.104, 5.11)]},
+    )
+    entry.add_to_hass(hass)
+    entities = er.async_get(hass)
+    retired = [
+        entities.async_get_or_create(
+            "sensor", DOMAIN, f"{entry.entry_id}_{key}", config_entry=entry
+        ).entity_id
+        for key in RETIRED_SENSORS
+    ]
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        f"running_totals_retired_{entry.entry_id}",
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="running_totals_retired",
+    )
+
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert all(entities.async_get(entity_id) is None for entity_id in retired)
+    issues = ir.async_get(hass)
+    assert issues.async_get_issue(DOMAIN, f"running_totals_retired_{entry.entry_id}") is None

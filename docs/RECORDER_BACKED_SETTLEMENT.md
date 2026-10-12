@@ -1,9 +1,11 @@
 # Recorder-backed settlement
 
-Implemented in 0.4.0, which collapsed the first three releases of the
-migration below into one: the record was retired in the same release that
-introduced its replacement, with the running-total sensors kept behind a
-repair issue as planned. One departure from the plan: cost statistics are
+Implemented in 0.4.0 and 0.5.0. The first collapsed the first three releases
+of the migration below into one: the record was retired in the same release
+that introduced its replacement, with the running-total sensors kept behind a
+repair issue as planned. The second removed the sensors and the repair, and
+forgets the entity registry entries they leave behind, which the plan had not
+anticipated. One departure from the plan: cost statistics are
 written only for hours the recorder observed. The seeded remainder stays in
 the bill and in the netting position, but a flat smear of cost over months
 nobody watched would have read in the dashboard as something that happened.

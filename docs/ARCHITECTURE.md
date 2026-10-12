@@ -246,8 +246,9 @@ every later hour is costed against, but a flat smear of cost over months
 nobody watched would read as something that happened. The statistics carry
 Home Assistant's configured currency, which is what the dashboard labels
 costs in, and the standing charge is left out: it is owed however the meters
-move. The running-total sensors that preceded them remain for one release
-behind a repair issue naming their successors.
+move. The running-total sensors that preceded them are gone: an install
+upgrading from the release that retired them has their registry entries and
+the repair that named their successors removed at setup.
 
 Testing needs Home Assistant, so those tests live in `tests/integration` and run
 in the workflow job that installs it. They put hours into the recorder directly

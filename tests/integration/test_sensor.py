@@ -2,15 +2,9 @@
 
 from datetime import date, timedelta
 
-from custom_components.hass_energy.const import (
-    ATTR_READING_DATE,
-    CONF_PRICES,
-    DOMAIN,
-    SERVICE_CLOSE_SETTLEMENT,
-)
+from custom_components.hass_energy.const import CONF_PRICES
 from custom_components.hass_energy.settings import price_entry
 from homeassistant.core import HomeAssistant
-from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from .conftest import DAY_START, EXPORT_ENTITY, IMPORT_ENTITY, TODAY, coordinator, record, refresh
@@ -42,8 +36,6 @@ async def test_every_line_of_the_settlement_is_an_entity(
         "settlement_period_length",
         "current_unit_price",
         "current_feed_in_price",
-        "grid_cost_so_far",
-        "export_compensation_so_far",
     ):
         assert hass.states.get(PREFIX + key) is not None, key
 
@@ -141,64 +133,3 @@ async def test_the_feed_in_price_follows_a_price_change(
     await hass.async_block_till_done()
 
     assert float(state_of(hass, "current_feed_in_price")) == 7.5
-
-
-async def test_the_running_totals_speak_the_dashboards_currency(
-    entry: MockConfigEntry, hass: HomeAssistant
-) -> None:
-    """The energy dashboard labels costs in Home Assistant's currency, not the contract's."""
-
-    for key in ("grid_cost_so_far", "export_compensation_so_far"):
-        state = hass.states.get(PREFIX + key)
-        assert state is not None, key
-        assert state.attributes["unit_of_measurement"] == hass.config.currency
-        assert state.attributes["device_class"] == "monetary"
-        assert state.attributes["state_class"] == "total"
-        assert state.attributes["last_reset"] == dt_util.start_of_local_day(TODAY).isoformat()
-
-
-async def test_the_grid_cost_is_the_energy_charge_with_vat(
-    entry: MockConfigEntry, hass: HomeAssistant
-) -> None:
-    await record(hass, IMPORT_ENTITY, DAY_START, [500.0])
-    await refresh(hass, entry)
-
-    # 500 kWh at the subsidized rate of 40, with 27% VAT on it.
-    assert float(state_of(hass, "grid_cost_so_far")) == 25400.0
-    assert state_of(hass, "export_compensation_so_far") == "0"
-
-
-async def test_export_that_cancels_import_takes_the_cost_back_down(
-    entry: MockConfigEntry, hass: HomeAssistant
-) -> None:
-    """An hour of export under szaldó is a negative cost, not a compensation."""
-
-    await record(hass, IMPORT_ENTITY, DAY_START, [500.0])
-    await record(hass, EXPORT_ENTITY, DAY_START, [800.0])
-    await refresh(hass, entry)
-
-    assert float(state_of(hass, "grid_cost_so_far")) == 0.0
-    # 300 kWh of surplus at the feed-in rate of 6.
-    assert state_of(hass, "export_compensation_so_far") == "1800"
-
-
-async def test_closing_the_settlement_resets_the_running_totals(
-    entry: MockConfigEntry, hass: HomeAssistant
-) -> None:
-    start = TODAY - timedelta(days=30)
-    await coordinator(entry).async_seed(start, imported=500.0, exported=0.0)
-    await hass.async_block_till_done()
-    before = hass.states.get(PREFIX + "grid_cost_so_far")
-    assert before is not None
-    assert float(before.state) > 0
-    assert before.attributes["last_reset"] == dt_util.start_of_local_day(start).isoformat()
-
-    await hass.services.async_call(
-        DOMAIN, SERVICE_CLOSE_SETTLEMENT, {ATTR_READING_DATE: TODAY}, blocking=True
-    )
-    await hass.async_block_till_done()
-
-    state = hass.states.get(PREFIX + "grid_cost_so_far")
-    assert state is not None
-    assert float(state.state) == 0.0
-    assert state.attributes["last_reset"] == dt_util.start_of_local_day(TODAY).isoformat()

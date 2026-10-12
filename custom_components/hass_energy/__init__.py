@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 
 from . import issues
-from .const import RETIRED_OPTIONS
+from .const import DOMAIN, RETIRED_OPTIONS, RETIRED_SENSORS
 from .coordinator import SettlementCoordinator
-from .costs import COST_KINDS, statistic_id
 from .costs import async_remove as remove_statistics
 from .services import register as register_services
 
@@ -21,6 +21,7 @@ type SettlementEntry = ConfigEntry[SettlementCoordinator]
 async def async_setup_entry(hass: HomeAssistant, entry: SettlementEntry) -> bool:
     """Set up one metering point."""
 
+    _forget_retired_sensors(hass, entry)
     coordinator = SettlementCoordinator(hass, entry)
     await coordinator.async_load()
     entry.runtime_data = coordinator
@@ -28,10 +29,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: SettlementEntry) -> bool
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_options_updated))
     register_services(hass)
-    issues.running_totals_retired(
-        hass, entry.entry_id, {kind: statistic_id(entry.entry_id, kind) for kind in COST_KINDS}
-    )
     return True
+
+
+@callback
+def _forget_retired_sensors(hass: HomeAssistant, entry: SettlementEntry) -> None:
+    """Leave nothing of the running-total sensors behind.
+
+    An entity the platform stops providing stays in the entity registry as
+    unavailable, with a warning that its integration no longer provides it,
+    and the repair that announced its retirement would otherwise outlive it.
+    """
+
+    registry = er.async_get(hass)
+    for key in RETIRED_SENSORS:
+        entity_id = registry.async_get_entity_id(
+            Platform.SENSOR, DOMAIN, f"{entry.entry_id}_{key}"
+        )
+        if entity_id is not None:
+            registry.async_remove(entity_id)
+    issues.running_totals_retired(hass, entry.entry_id)
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: SettlementEntry) -> bool:

@@ -23,6 +23,10 @@ CONF_CURRENCY: Final = "currency"
 CONF_PRICES: Final = "prices"
 #: Dropped by the entry migration to version 2: the record it limited is gone.
 RETIRED_OPTIONS: Final = ("max_step_kwh",)
+#: Sensor keys that 0.4.0 kept behind a repair issue and 0.5.0 removed. Their
+#: successors are the cost statistics; what is left of them in the entity
+#: registry is forgotten at setup.
+RETIRED_SENSORS: Final = ("grid_cost", "export_compensation")
 
 #: One entry of the price schedule.
 CONF_VALID_FROM: Final = "valid_from"

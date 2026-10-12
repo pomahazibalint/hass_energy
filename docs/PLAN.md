@@ -65,7 +65,6 @@ the integration reads the recorder rather than keeping its own record of
 energy, and the migration that got it there.
 
 ## Ideas backlog
-- Remove the retired running-total sensors and their repair issue
 - Tariff plugins
 - Battery support
 - Dynamic pricing

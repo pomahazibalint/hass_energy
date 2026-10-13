@@ -5,16 +5,18 @@
 // the household has: a line whose sensor is unavailable is a figure whose
 // sources the household lacks, and is left out rather than shown as nothing.
 
+import { t } from "./strings.js";
+
 const LINES = [
-  ["energy_cost", "Grid energy", "net"],
-  ["solar_value", "What the panels avoided", "info"],
-  ["surplus_value", "Surplus owed by the supplier", "credit"],
-  ["standing_charge", "Standing charge", "net"],
-  ["vat", "VAT", "net"],
-  ["total_payable", "Total payable", "total"],
-  ["net_position", "Net position", "total"],
-  ["allowance_remaining", "Allowance remaining", "info"],
-  ["period_days", "Days into the period", "info"],
+  ["energy_cost", "net"],
+  ["solar_value", "info"],
+  ["surplus_value", "credit"],
+  ["standing_charge", "net"],
+  ["vat", "net"],
+  ["total_payable", "total"],
+  ["net_position", "total"],
+  ["allowance_remaining", "info"],
+  ["period_days", "info"],
 ];
 
 const STYLE = `
@@ -46,7 +48,8 @@ class HassEnergyBillCard extends HTMLElement {
     this._hass = hass;
     // Re-render only when a line changed: the hass object changes on every
     // state in the house, and this card is on a dashboard full of them.
-    const key = LINES.map(([line]) => this._state(line)?.last_updated ?? "").join("|");
+    const key =
+      hass.locale?.language + "|" + LINES.map(([line]) => this._state(line)?.last_updated ?? "").join("|");
     if (key !== this._rendered) {
       this._rendered = key;
       this._render();
@@ -66,27 +69,31 @@ class HassEnergyBillCard extends HTMLElement {
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
     }
+    const hass = this._hass;
     const rows = [];
-    for (const [line, label, kind] of LINES) {
+    for (const [line, kind] of LINES) {
       const state = this._state(line);
       if (!state || state.state === "unavailable") continue;
-      const value = state.state === "unknown" ? "—" : this._hass.formatEntityState(state);
-      rows.push(`<tr class="${kind}"><td>${escape(label)}</td><td class="value">${escape(value)}</td></tr>`);
+      const value = state.state === "unknown" ? "—" : hass.formatEntityState(state);
+      rows.push(
+        `<tr class="${kind}"><td>${escape(t(hass, `line_${line}`))}</td><td class="value">${escape(value)}</td></tr>`
+      );
     }
     const payable = this._state("total_payable");
     const period = payable?.attributes?.period_start
-      ? `<div class="period">Settlement period from ${escape(payable.attributes.period_start)}</div>`
+      ? `<div class="period">${escape(t(hass, "period_from", { date: payable.attributes.period_start }))}</div>`
       : "";
     const title = this._config.title ? `<h1>${escape(this._config.title)}</h1>` : "";
+    const link = `<a href="/config/energy">${escape(t(hass, "sources_link"))}</a>`;
     const footer = this._config.hide_footer
       ? ""
-      : `<div class="footer">Sources are named in the <a href="/config/energy">energy dashboard settings</a>.</div>`;
+      : `<div class="footer">${escape(t(hass, "sources_footer", { link: "\u0000" })).replace("\u0000", link)}</div>`;
     this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card>${title}${period}<table>${rows.join("")}</table>${footer}</ha-card>`;
-    const link = this.shadowRoot.querySelector("a");
-    if (link) {
-      link.addEventListener("click", (event) => {
+    const anchor = this.shadowRoot.querySelector("a");
+    if (anchor) {
+      anchor.addEventListener("click", (event) => {
         event.preventDefault();
-        history.pushState(null, "", link.getAttribute("href"));
+        history.pushState(null, "", anchor.getAttribute("href"));
         window.dispatchEvent(new Event("location-changed"));
       });
     }

@@ -6,14 +6,21 @@
 // A strategy is a custom element named ll-strategy-dashboard-<name> with a
 // static generate(); the entry in window.customStrategies is what makes the
 // new-dashboard dialog offer it.
+//
+// Three views per metering point, in the sections grid so a wide screen is
+// used across: the settlement, with the invoice beside the outlook; usage,
+// the native energy cards for the selected range beside the integration's
+// own figures and the devices; and history, the long view by month.
+
+import { t } from "./strings.js";
 
 const DOMAIN = "hass_energy";
 
 class HassEnergyDashboardStrategy {
   static noEditor = true;
 
-  static getCreateSuggestions() {
-    return { title: "Energy settlement", icon: "mdi:receipt-text-outline" };
+  static getCreateSuggestions(hass) {
+    return { title: t(hass, "suggestion_title"), icon: "mdi:receipt-text-outline" };
   }
 
   static async generate(config, hass) {
@@ -26,19 +33,12 @@ class HassEnergyDashboardStrategy {
     const loaded = entries.filter((entry) => entry.state === "loaded");
     const views = [];
     loaded.forEach((entry, index) => {
-      views.push(...viewsFor(entry, registry, statistics, prefs, index, loaded.length > 1));
+      views.push(...viewsFor(entry, registry, statistics, prefs, hass, index, loaded.length > 1));
     });
     if (!views.length) {
       views.push({
-        title: "Energy settlement",
-        cards: [
-          {
-            type: "markdown",
-            content:
-              "No Energy Settlement metering point is set up. Add one under " +
-              "Settings > Devices & services, and this dashboard fills itself.",
-          },
-        ],
+        title: t(hass, "suggestion_title"),
+        cards: [{ type: "markdown", content: t(hass, "no_entry") }],
       });
     }
     return { views };
@@ -61,188 +61,40 @@ function entitiesOf(entry, registry) {
   return { byLine, devices };
 }
 
-// The statistic of one kind the entry wrote, if it has.
-function statisticOf(entry, statistics, kind) {
-  const suffix = `_${kind}`;
-  const match = statistics.find(
-    (one) =>
-      one.source === DOMAIN &&
-      one.statistic_id.startsWith(`${DOMAIN}:`) &&
-      one.statistic_id.includes(entry.entry_id) &&
-      one.statistic_id.endsWith(suffix)
+// The statistics the entry wrote, by kind; the ids are the recorder's, so
+// the strategy never reproduces the backend's naming.
+function statisticsOf(entry, statistics) {
+  const own = statistics.filter(
+    (one) => one.source === DOMAIN && one.statistic_id.startsWith(`${DOMAIN}:`) && one.statistic_id.includes(entry.entry_id)
   );
-  return match?.statistic_id;
+  const ofKind = (kind) => own.find((one) => one.statistic_id.endsWith(`_${kind}`))?.statistic_id;
+  const devices = own
+    .filter((one) => one.statistic_id.includes(`${entry.entry_id}_device_`) && one.statistic_id.endsWith("_cost"))
+    .map((one) => one.statistic_id);
+  return { ofKind, devices };
 }
 
-// The grid meters the energy dashboard names: the long view is theirs,
-// since they are the record and reach back to before the integration.
-// Home Assistant 2026.10 gave the grid source one import and one export
-// statistic; before that it carried lists of flows, and a stored document
-// keeps the old shape until it is next saved.
-function gridOf(prefs) {
+// What the energy dashboard names: the grid meters, in either format, and
+// whether there is solar, a battery and devices to show cards for.
+function preferencesOf(prefs) {
   const imported = [];
   const exported = [];
+  let solar = false;
+  let battery = false;
   for (const source of prefs?.energy_sources || []) {
-    if (source.type !== "grid") continue;
-    imported.push(...(source.flow_from || []).map((flow) => flow.stat_energy_from));
-    exported.push(...(source.flow_to || []).map((flow) => flow.stat_energy_to));
-    if (source.stat_energy_from) imported.push(source.stat_energy_from);
-    if (source.stat_energy_to) exported.push(source.stat_energy_to);
+    if (source.type === "grid") {
+      imported.push(...(source.flow_from || []).map((flow) => flow.stat_energy_from));
+      exported.push(...(source.flow_to || []).map((flow) => flow.stat_energy_to));
+      if (source.stat_energy_from) imported.push(source.stat_energy_from);
+      if (source.stat_energy_to) exported.push(source.stat_energy_to);
+    } else if (source.type === "solar") {
+      solar = true;
+    } else if (source.type === "battery") {
+      battery = true;
+    }
   }
-  return { imported, exported };
-}
-
-function viewsFor(entry, registry, statistics, prefs, index, several) {
-  const { byLine, devices } = entitiesOf(entry, registry);
-  const suffix = index ? `-${index + 1}` : "";
-  const prefix = several ? `${entry.title}: ` : "";
-  const present = (lines) => lines.map((line) => byLine[line]).filter(Boolean);
-  const graph = (title, kinds) => {
-    const ids = kinds.map((kind) => statisticOf(entry, statistics, kind)).filter(Boolean);
-    return ids.length
-      ? [
-          {
-            type: "statistics-graph",
-            title,
-            entities: ids,
-            stat_types: ["change"],
-            chart_type: "bar",
-            period: "day",
-            energy_date_selection: true,
-          },
-        ]
-      : [];
-  };
-
-  const bill = {
-    title: `${prefix}Bill`,
-    path: `bill${suffix}`,
-    icon: "mdi:receipt-text-outline",
-    cards: [
-      {
-        type: "custom:hass-energy-bill-card",
-        title: entry.title,
-        entities: Object.fromEntries(
-          Object.entries(byLine).filter(([line]) => BILL_LINES.includes(line))
-        ),
-      },
-    ],
-  };
-
-  const usage = {
-    title: `${prefix}Usage`,
-    path: `usage${suffix}`,
-    icon: "mdi:chart-bar",
-    cards: [
-      { type: "energy-date-selection" },
-      { type: "energy-usage-graph" },
-      { type: "energy-distribution" },
-      ...graph("House consumption", ["house_consumption", "self_consumed_solar"]),
-      ...graph("Consumption cost and solar value", ["consumption_cost", "solar_value"]),
-    ],
-  };
-
-  const outlook = {
-    title: `${prefix}Outlook`,
-    path: `outlook${suffix}`,
-    icon: "mdi:chart-timeline-variant",
-    cards: [
-      {
-        type: "entities",
-        title: "Where the period is heading",
-        entities: present([
-          "projected_total_payable",
-          "projected_billed_energy",
-          "allowance_runs_out",
-          "allowance_remaining",
-          "period_days",
-        ]),
-      },
-      {
-        type: "entities",
-        title: "Solar and battery",
-        entities: present([
-          "solar_value",
-          "self_consumed_solar",
-          "house_consumption",
-          "consumption_cost",
-          "battery_saving",
-        ]),
-      },
-    ].filter((card) => card.entities.length),
-  };
-
-  const deviceStatistics = statistics
-    .filter(
-      (one) =>
-        one.source === DOMAIN &&
-        one.statistic_id.includes(`${entry.entry_id}_device_`) &&
-        one.statistic_id.endsWith("_cost")
-    )
-    .map((one) => one.statistic_id);
-  const devicesView = {
-    title: `${prefix}Devices`,
-    path: `devices${suffix}`,
-    icon: "mdi:power-plug",
-    cards: [
-      {
-        type: "custom:hass-energy-devices-card",
-        title: "This settlement period",
-        devices,
-        entities: Object.fromEntries(
-          Object.entries(byLine).filter(([line]) =>
-            ["consumption_cost", "house_consumption"].includes(line)
-          )
-        ),
-      },
-      ...(deviceStatistics.length
-        ? [
-            { type: "energy-date-selection" },
-            {
-              type: "statistics-graph",
-              title: "Device cost over the selected range",
-              entities: deviceStatistics,
-              stat_types: ["change"],
-              chart_type: "bar",
-              period: "day",
-              energy_date_selection: true,
-            },
-          ]
-        : []),
-    ],
-  };
-
-  const grid = gridOf(prefs);
-  const history = (title, statistic) =>
-    statistic ? [{ type: "custom:hass-energy-history-card", title, statistic, years: 3 }] : [];
-  const settled = ["settlement_cost", "imported_energy"]
-    .map((kind) => statisticOf(entry, statistics, kind))
-    .filter(Boolean);
-  const historyView = {
-    title: `${prefix}History`,
-    path: `history${suffix}`,
-    icon: "mdi:history",
-    cards: [
-      ...history("Grid import by month", grid.imported[0]),
-      ...history("Grid export by month", grid.exported[0]),
-      ...history("House consumption by month", statisticOf(entry, statistics, "house_consumption")),
-      ...(settled.length
-        ? [
-            {
-              type: "statistics-graph",
-              title: "Past settlements",
-              entities: settled,
-              stat_types: ["change"],
-              chart_type: "bar",
-              period: "month",
-              days_to_show: 1500,
-            },
-          ]
-        : []),
-    ],
-  };
-
-  return [bill, usage, devicesView, historyView, outlook];
+  const devices = (prefs?.device_consumption || []).length > 0;
+  return { imported, exported, solar, battery, devices };
 }
 
 const BILL_LINES = [
@@ -257,12 +109,154 @@ const BILL_LINES = [
   "period_days",
 ];
 
+const section = (cards, span) => (span ? { type: "grid", column_span: span, cards } : { type: "grid", cards });
+const statisticsGraph = (title, entities, extra = {}) => ({
+  type: "statistics-graph",
+  title,
+  entities,
+  stat_types: ["change"],
+  chart_type: "bar",
+  period: "day",
+  energy_date_selection: true,
+  ...extra,
+});
+
+function viewsFor(entry, registry, statistics, prefs, hass, index, several) {
+  const { byLine, devices } = entitiesOf(entry, registry);
+  const own = statisticsOf(entry, statistics);
+  const named = preferencesOf(prefs);
+  const suffix = index ? `-${index + 1}` : "";
+  const prefix = several ? `${entry.title}: ` : "";
+  const present = (lines) => lines.map((line) => byLine[line]).filter(Boolean);
+  const entities = (title, lines) => {
+    const ids = present(lines);
+    return ids.length ? [{ type: "entities", title, entities: ids }] : [];
+  };
+  const graph = (title, kinds) => {
+    const ids = kinds.map((kind) => own.ofKind(kind)).filter(Boolean);
+    return ids.length ? [statisticsGraph(title, ids)] : [];
+  };
+
+  const settlement = {
+    title: `${prefix}${t(hass, "view_settlement")}`,
+    path: `settlement${suffix}`,
+    icon: "mdi:receipt-text-outline",
+    type: "sections",
+    max_columns: 3,
+    sections: [
+      section([
+        {
+          type: "custom:hass-energy-bill-card",
+          title: entry.title,
+          entities: Object.fromEntries(Object.entries(byLine).filter(([line]) => BILL_LINES.includes(line))),
+        },
+      ]),
+      section([
+        ...entities(t(hass, "outlook"), [
+          "projected_total_payable",
+          "projected_billed_energy",
+          "allowance_runs_out",
+          "allowance_remaining",
+          "period_days",
+        ]),
+        ...entities(t(hass, "solar_battery"), [
+          "solar_value",
+          "self_consumed_solar",
+          "house_consumption",
+          "consumption_cost",
+          "battery_saving",
+        ]),
+      ]),
+    ],
+  };
+
+  // The native cards share the energy date picker; so do the statistics
+  // graphs over the integration's own figures, through its date selection.
+  const gauges = [
+    ...(named.solar ? [{ type: "energy-solar-consumed-gauge", grid_options: { columns: 6 } }] : []),
+    ...(named.exported.length ? [{ type: "energy-grid-neutrality-gauge", grid_options: { columns: 6 } }] : []),
+  ];
+  const usage = {
+    title: `${prefix}${t(hass, "view_usage")}`,
+    path: `usage${suffix}`,
+    icon: "mdi:chart-bar",
+    type: "sections",
+    max_columns: 4,
+    sections: [
+      section([{ type: "energy-date-selection" }], 4),
+      section([{ type: "energy-usage-graph" }], 2),
+      section([named.devices ? { type: "energy-sankey" } : { type: "energy-distribution" }], 2),
+      ...(named.solar ? [section([{ type: "energy-solar-graph" }], 2)] : []),
+      ...(gauges.length ? [section(gauges, 2)] : []),
+      section([{ type: "energy-sources-table" }], 2),
+      ...graph(t(hass, "house_consumption"), ["house_consumption", "self_consumed_solar"]).map((card) => section([card], 2)),
+      ...graph(t(hass, "cost_and_value"), ["consumption_cost", "solar_value"]).map((card) => section([card], 2)),
+      ...(named.devices
+        ? [
+            section([{ type: "energy-devices-graph" }], 2),
+            section([{ type: "energy-devices-detail-graph" }], 2),
+          ]
+        : []),
+      section(
+        [
+          {
+            type: "custom:hass-energy-devices-card",
+            title: t(hass, "devices_period"),
+            devices,
+            entities: Object.fromEntries(
+              Object.entries(byLine).filter(([line]) => ["consumption_cost", "house_consumption"].includes(line))
+            ),
+          },
+        ],
+        2
+      ),
+      ...(own.devices.length ? [section([statisticsGraph(t(hass, "devices_range"), own.devices)], 2)] : []),
+    ],
+  };
+
+  const monthly = (title, statistic) =>
+    statistic ? [section([{ type: "custom:hass-energy-history-card", title, statistic, years: 3 }], 2)] : [];
+  const settled = ["settlement_cost", "imported_energy"].map((kind) => own.ofKind(kind)).filter(Boolean);
+  const history = {
+    title: `${prefix}${t(hass, "view_history")}`,
+    path: `history${suffix}`,
+    icon: "mdi:history",
+    type: "sections",
+    max_columns: 4,
+    sections: [
+      ...monthly(t(hass, "grid_import"), named.imported[0]),
+      ...monthly(t(hass, "grid_export"), named.exported[0]),
+      ...monthly(t(hass, "house_by_month"), own.ofKind("house_consumption")),
+      ...(settled.length
+        ? [
+            section(
+              [
+                {
+                  type: "statistics-graph",
+                  title: t(hass, "past_settlements"),
+                  entities: settled,
+                  stat_types: ["change"],
+                  chart_type: "bar",
+                  period: "month",
+                  days_to_show: 1500,
+                },
+              ],
+              2
+            ),
+          ]
+        : []),
+    ],
+  };
+
+  return [settlement, usage, history];
+}
+
 customElements.define("ll-strategy-dashboard-hass-energy", HassEnergyDashboardStrategy);
 window.customStrategies = window.customStrategies || [];
 window.customStrategies.push({
   type: "hass-energy",
-  name: "Energy settlement",
-  description: "The settlement as an invoice, what the house used, and where the period is heading.",
+  name: t(null, "listing_name"),
+  description: t(null, "listing_description"),
   documentationURL: "https://github.com/pomahazibalint/hass_energy",
   strategyType: "dashboard",
 });

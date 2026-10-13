@@ -1,0 +1,247 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Energia elszámolás",
+        "description": "Válaszd ki a mérőket, amelyek alapján ez a mérési pont elszámolásra kerül. Az árak és a szerződéses feltételek később szerkeszthetők.",
+        "data": {
+          "name": "Név",
+          "import_entity": "Hálózati vételezés mérője",
+          "export_entity": "Hálózati betáplálás mérője"
+        },
+        "data_description": {
+          "import_entity": "Kumulált kWh szenzor, nem teljesítményszenzor.",
+          "export_entity": "Hagyd üresen, ha nincs termelés."
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Energia elszámolás",
+        "menu_options": {
+          "terms": "Szerződéses feltételek",
+          "prices": "Árak",
+          "battery": "Akkumulátor: mi lenne, ha",
+          "remove_price": "Ármódosítás törlése"
+        }
+      },
+      "battery": {
+        "title": "Akkumulátor: mi lenne, ha",
+        "description": "Egy akkumulátor, amely nincs a házban, hogy kiderüljön, mennyit takarított volna meg. Az elszámolási módtól függetlenül bruttó elszámolás szerint árazva, mert szaldó mellett az éves nettósítás maga egy ingyenes akkumulátor, és a kérdés az átállásnál számít. Nulla kapacitás kikapcsolja a mutatót.",
+        "data": {
+          "battery_capacity_kwh": "Kapacitás (kWh)",
+          "battery_efficiency_percent": "Oda-vissza hatásfok (%)"
+        },
+        "data_description": {
+          "battery_efficiency_percent": "A betöltött energiának ekkora része jön vissza."
+        }
+      },
+      "terms": {
+        "title": "Szerződéses feltételek",
+        "data": {
+          "allowance_kwh": "Rezsicsökkentett keret (kWh/év)",
+          "allowance_basis": "A keretet fogyasztja",
+          "mode": "Elszámolási mód",
+          "standing_charge_per_month": "Havi alapdíj, nettó",
+          "standing_charge_months": "Alapdíjas hónapok elszámolásonként",
+          "vat_percent": "ÁFA (%)",
+          "currency": "Pénznem"
+        },
+        "data_description": {
+          "allowance_basis": "A keretet a teljes vételezés fogyasztja-e, vagy csak az, ami a termelés nettósítása után marad. A kettő élesen eltér egy sokat vételező és sokat termelő háztartásnál.",
+          "mode": "A szaldó a termelést a fogyasztással szemben nettósítja. Az üzembe helyezés után tíz évvel megszűnik, utána az elszámolás bruttó."
+        }
+      },
+      "prices": {
+        "title": "Árak",
+        "description": "Add meg a választott naptól érvényes árakat. Hagyd a dátumot a mai napon egy mostantól érvényes változáshoz, vagy állítsd vissza egy később észrevett javításhoz. Az azon a napon már érvényes árak felülíródnak.",
+        "data": {
+          "valid_from": "Érvényes ettől",
+          "subsidized": "Rezsicsökkentett ár",
+          "market": "Lakossági piaci ár",
+          "feed_in": "Betáplálási ár"
+        },
+        "data_description": {
+          "feed_in": "A nettósítással el nem számolható termelésért fizetett ár. Jellemzően töredéke annak, amennyibe ugyanaz a kWh vételezve kerül."
+        }
+      },
+      "remove_price": {
+        "title": "Ármódosítás törlése",
+        "description": "Törli a rossz dátummal felvett ármódosítást.",
+        "data": {
+          "valid_from": "Érvényes ettől"
+        }
+      }
+    },
+    "error": {
+      "invalid_date": "Ez nem dátum."
+    }
+  },
+  "selector": {
+    "allowance_basis": {
+      "options": {
+        "netted": "Nettósított fogyasztás",
+        "gross": "Teljes vételezés"
+      }
+    },
+    "mode": {
+      "options": {
+        "szaldo": "Szaldó (nettósított)",
+        "brutto": "Bruttó"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "billed_energy": {
+        "name": "Elszámolt energia"
+      },
+      "surplus_energy": {
+        "name": "Többletenergia"
+      },
+      "subsidized_energy": {
+        "name": "Rezsicsökkentett energia"
+      },
+      "market_energy": {
+        "name": "Piaci áras energia"
+      },
+      "allowance_remaining": {
+        "name": "Fennmaradó keret"
+      },
+      "energy_cost": {
+        "name": "Energiaköltség"
+      },
+      "standing_charge": {
+        "name": "Alapdíj"
+      },
+      "vat": {
+        "name": "ÁFA"
+      },
+      "total_payable": {
+        "name": "Fizetendő összeg"
+      },
+      "surplus_value": {
+        "name": "Többletért járó összeg"
+      },
+      "net_position": {
+        "name": "Egyenleg"
+      },
+      "period_days": {
+        "name": "Elszámolási időszak hossza"
+      },
+      "unit_price": {
+        "name": "Aktuális egységár"
+      },
+      "feed_in_price": {
+        "name": "Aktuális betáplálási ár"
+      },
+      "house_consumption": {
+        "name": "Háztartás fogyasztása"
+      },
+      "self_consumed_solar": {
+        "name": "Saját felhasználású napenergia"
+      },
+      "solar_value": {
+        "name": "Napelemek értéke"
+      },
+      "consumption_cost": {
+        "name": "Fogyasztás költsége"
+      },
+      "device_cost": {
+        "name": "{device} költsége"
+      },
+      "projected_total_payable": {
+        "name": "Várható fizetendő összeg"
+      },
+      "projected_billed_energy": {
+        "name": "Várható elszámolt energia"
+      },
+      "allowance_runs_out": {
+        "name": "A keret kimerülésének napja"
+      },
+      "battery_saving": {
+        "name": "Akkumulátor megtakarítása bruttó elszámolással"
+      }
+    }
+  },
+  "services": {
+    "close_settlement": {
+      "name": "Elszámolási időszak lezárása",
+      "description": "Új elszámolási időszakot kezd a mérőleolvasás napján. A határ a leolvasást követi, nem a naptárt.",
+      "fields": {
+        "reading_date": {
+          "name": "Leolvasás napja",
+          "description": "Alapértelmezés szerint a mai nap."
+        }
+      }
+    },
+    "seed_period": {
+      "name": "Elszámolási időszak átvétele",
+      "description": "Átvesz egy már folyamatban lévő elszámolási időszakot, hogy az időszak közben telepített integráció ne nulláról számoljon. A számokat az utolsó számládról és a mérő jelenlegi állásáról vedd.",
+      "fields": {
+        "period_start": {
+          "name": "Időszak kezdete",
+          "description": "Az utolsó mérőleolvasás napja."
+        },
+        "imported_kwh": {
+          "name": "Eddig vételezett",
+          "description": "A leolvasás óta vételezett kWh."
+        },
+        "exported_kwh": {
+          "name": "Eddig betáplált",
+          "description": "A leolvasás óta betáplált kWh."
+        }
+      }
+    },
+    "import_invoice": {
+      "name": "Elszámolt számla importálása",
+      "description": "Egy korábbi elszámolást hosszú távú statisztikaként rögzít, hogy a korábbi évek is megjelenjenek az előzményekben, ne csak a mai naptól kezdődjön a történet.",
+      "fields": {
+        "period_start": {
+          "name": "Időszak kezdete",
+          "description": "A számla által fedett első nap."
+        },
+        "period_end": {
+          "name": "Időszak vége",
+          "description": "A számla által fedett utolsó nap."
+        },
+        "imported_kwh": {
+          "name": "Vételezett",
+          "description": "Az időszakban vételezett kWh."
+        },
+        "exported_kwh": {
+          "name": "Betáplált",
+          "description": "Az időszakban betáplált kWh."
+        }
+      }
+    }
+  },
+  "issues": {
+    "price_coverage": {
+      "title": "Nincs ár az elszámolási időszak kezdetére",
+      "description": "Az árlista nem ér vissza {period_start}-ig, amikor a jelenlegi elszámolási időszak kezdődött, így a már rögzített energia nem értékelhető. Adj hozzá egy legkésőbb ezen a napon érvénybe lépő ármódosítást."
+    },
+    "settlement_overdue": {
+      "title": "Az elszámolási időszak már {days} napja tart",
+      "description": "Egy ilyen hosszú elszámolási időszak arra utal, hogy a mérőt leolvasták anélkül, hogy az integráció tudna róla. Hívd meg az Elszámolási időszak lezárása műveletet a leolvasás dátumával a következő időszak indításához."
+    },
+    "source_stale": {
+      "title": "Energiaforrások rögzítése leállt",
+      "description": "A rögzítő több mint {days} napja nem kapott semmit ezektől: {entities}. Az elszámolás a hosszú távú statisztikákból olvas, így ezekből a forrásokból semmi nem számít, amíg újra rögzítésre nem kerülnek. Egy éjszakára elérhetetlenné váló szenzor, például egy inverteré, nem ez az eset."
+    },
+    "source_unrecorded": {
+      "title": "Energiaforrás-szenzoroknak nincs statisztikája",
+      "description": "A rögzítő soha nem készített statisztikát ezekről: {entities}. Az elszámolás a hosszú távú statisztikákból olvas, így ezekből a forrásokból semmi nem számít, amíg nem kerülnek rögzítésre total állapotosztállyal és kWh mértékegységgel."
+    },
+    "sources_disagree": {
+      "title": "Az energiaforrások {hours} órában ellentmondanak egymásnak",
+      "description": "Az elszámolási időszak {hours} órájában több energia hagyta el a házat, mint amennyi bejött, összesen {lost_kwh} kWh, a legrosszabb a {worst} kezdetű órában. Ez nem történhet meg, tehát vagy egy forrásnak egyáltalán nincs statisztikája arra az órára, például egy inverter szenzorai kiestek, miközben a hálózati mérő tovább számolt, vagy valamelyik rossz órában jelent: az inverter késik a hálózati mérőhöz képest, vagy a termelésmérő az akkumulátor töltését is számolja. Az energia-irányítópult ugyanezeket a sorokat olvassa, és ugyanennyivel túlbecsüli a fogyasztást. Az integráció diagnosztikája felsorolja a legrosszabb órákat azzal, hogy melyik forrás mit mutatott és melyiknek nem volt adata; vesd össze az energia-irányítópult aznapi nézetével."
+    },
+    "device_bursts": {
+      "title": "Eszközmérők rossz órára könyvelték az energiát",
+      "description": "{devices}. Egy eszközmérő többet tett egy órába, mint amennyit az egész ház fogyasztott abban az órában; ez akkor fordul elő, ha a mérő egy töltési vagy használati menet energiáját a befejezéskor jelenti, vagy ha az állása egy kapcsolati kiesés alatt állt, majd egy lépésben utolérte magát. Az összeg jó, az órák nem: az eszköz költsége az ilyen órára a ház költségére van korlátozva, és amit valójában a korábbi órákban használt, az a ház többi részeként számít. Az elszámolással semmi baj; az eszköz költsége csak annyira pontos, amennyire a mérőjének időzítése, és az órákat az integráció diagnosztikája sorolja fel."
+    }
+  }
+}

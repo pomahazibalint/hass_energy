@@ -165,7 +165,7 @@ async def test_a_device_above_the_house_is_capped_and_reported(
     registry = ir.async_get(hass)
     issue = registry.async_get_issue(DOMAIN, f"device_bursts_{entry.entry_id}")
     assert issue is not None
-    assert issue.translation_placeholders == {"devices": "Washer: 1 hour, 2.0 kWh above the house"}
+    assert issue.translation_placeholders == {"devices": "Washer (1 h, 2.0 kWh)"}
     # The house's own figures agree with each other; that repair stays quiet.
     assert registry.async_get_issue(DOMAIN, f"sources_disagree_{entry.entry_id}") is None
     report = await async_get_config_entry_diagnostics(hass, entry)

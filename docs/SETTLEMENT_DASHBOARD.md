@@ -282,7 +282,13 @@ not keep a stale module across an upgrade. Core's marketplace, the HACS
 successor on its development branch, recognises a resource loaded that way
 and leaves it alone.
 
-The strategy arranges five views.
+The strategy arranged five views at first, one per question, each a single
+column of cards. Use showed that a wide screen was mostly empty and that
+the questions pair up, so it arranges three, in the sections grid, which
+fills a screen across and stacks on a phone: Settlement, the invoice beside
+the outlook; Usage, the native energy cards for the selected range beside
+the integration's own figures and the devices; and History, the long view.
+The five below are the questions; the three are how they are laid out.
 
 Bill: the settlement as an invoice. Grid cost, what solar avoided, surplus
 compensation, standing charge, VAT, total payable, net position, allowance
@@ -315,8 +321,22 @@ Outlook: the projected bill, energy and allowance date, and the battery and
 solar figures. Native cards over sensors.
 
 The native settings dialogs stay the only place sources are configured, and
-the Bill view links to them. The native cards keep their look; the
-dashboard's own look lives in its layout and its three cards.
+the Bill card links to them. The native cards keep their look; the
+dashboard's own look lives in its layout and its three cards. The Usage
+view takes every native energy card the household has sources for: the
+usage graph, the distribution or, with devices named, the sankey, the solar
+graph, the self-consumption and grid-neutrality gauges, the sources table,
+and the device graphs. They share the energy date picker, and the
+statistics graphs over the integration's own figures follow it through the
+card's own date-selection option.
+
+The dashboard speaks the user's language. What Home Assistant renders,
+entity names and repairs, is translated in the integration's translations
+directory, English and Hungarian; what the strategy and the cards write
+themselves, view and card titles, the invoice's lines, the devices table,
+is translated in the module `strings.js` from the language in `hass`, with
+month names from the browser's own locale data. A repair's placeholders
+carry data and never words, so a translation can phrase the sentence.
 
 The cards are written as plain modules, without a framework or a build step,
 for as long as they stay thin. The rule for adding a toolchain is that a card
@@ -402,6 +422,10 @@ Bill card had shown that a plain module is a hundred lines to own and
 nothing to build, and the two cards followed the same shape. The device
 cost sensors gained the device's name as an attribute so the Devices card
 needs no registry lookup.
+
+After the plan: the five views became three in the sections grid, the
+native energy cards came in, the History card gained the hover tooltip the
+native charts have, and the dashboard and the integration gained Hungarian.
 
 The engine's new rules, the counterfactual, the hourly consumption cost and
 the seasonal projection, are tested in `tests/` without Home Assistant. The

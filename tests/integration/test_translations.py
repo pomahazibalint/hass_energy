@@ -45,8 +45,26 @@ async def test_every_sensor_has_a_name(entry: MockConfigEntry, hass: HomeAssista
         assert f"component.hass_energy.entity.sensor.{key}.name" in translations, key
 
 
-def test_the_translation_file_matches_the_strings() -> None:
+def keys_of(tree: dict[str, object], prefix: str = "") -> set[str]:
+    found: set[str] = set()
+    for key, value in tree.items():
+        if isinstance(value, dict):
+            found |= keys_of(value, f"{prefix}{key}.")
+        else:
+            found.add(prefix + key)
+    return found
+
+
+def test_the_english_translation_matches_the_strings() -> None:
     """The translations are a copy of strings.json, and a copy can drift."""
 
     en = json.loads(Path("custom_components/hass_energy/translations/en.json").read_text())
     assert en == STRINGS
+
+
+def test_every_language_has_every_string() -> None:
+    """A language missing a key shows the key, in that language's UI only."""
+
+    for path in Path("custom_components/hass_energy/translations").glob("*.json"):
+        translated = json.loads(path.read_text())
+        assert keys_of(translated) == keys_of(STRINGS), path.name

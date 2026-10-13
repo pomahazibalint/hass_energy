@@ -5,8 +5,10 @@
 // hierarchy the dashboard's own device graph shows rather than summing a
 // parent and its child together. The part no device accounts for is the
 // rest of the house. The range is the settlement period, the question the
-// integration answers; the native statistics graph beside this card follows
-// the energy date picker for any other range.
+// integration answers; the native cards beside this one follow the energy
+// date picker for any other range.
+
+import { t } from "./strings.js";
 
 const STYLE = `
   :host { display: block; }
@@ -19,8 +21,8 @@ const STYLE = `
   td { padding: 8px 0; border-top: 1px solid var(--divider-color); color: var(--primary-text-color); }
   td.value { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
   td.nested { padding-left: 24px; color: var(--secondary-text-color); }
-  tr.rest td, tr.total td { color: var(--secondary-text-color); }
-  tr.total td { font-weight: 500; color: var(--primary-text-color); }
+  tr.rest td { color: var(--secondary-text-color); }
+  tr.total td { font-weight: 500; }
   .bar { height: 4px; background: var(--primary-color); border-radius: 2px; margin-top: 4px; }
   .empty { color: var(--secondary-text-color); padding: 8px 0 16px; }
 `;
@@ -37,7 +39,7 @@ class HassEnergyDevicesCard extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     const watched = [...this._config.devices, ...Object.values(this._config.entities || {})];
-    const key = watched.map((id) => hass.states[id]?.last_updated ?? "").join("|");
+    const key = hass.locale?.language + "|" + watched.map((id) => hass.states[id]?.last_updated ?? "").join("|");
     if (key !== this._rendered) {
       this._rendered = key;
       this._render();
@@ -79,10 +81,11 @@ class HassEnergyDevicesCard extends HTMLElement {
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
     }
+    const hass = this._hass;
     const title = this._config.title ? `<h1>${escape(this._config.title)}</h1>` : "";
     const { rows, top } = this._rows();
     if (!rows.length) {
-      this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card>${title}<div class="empty">No device is named in the energy dashboard settings, or none has reported yet.</div></ha-card>`;
+      this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card>${title}<div class="empty">${escape(t(hass, "no_devices"))}</div></ha-card>`;
       return;
     }
     const unit = rows[0].unit;
@@ -90,18 +93,21 @@ class HassEnergyDevicesCard extends HTMLElement {
     const accounted = top.reduce((sum, device) => sum + device.cost, 0);
     const accountedKwh = top.reduce((sum, device) => sum + device.kwh, 0);
     const widest = Math.max(house?.cost ?? 0, ...top.map((device) => device.cost), 1);
+    const numbers = new Intl.NumberFormat(hass.locale?.language || "en");
     const cells = (name, kwh, cost, cls) =>
       `<tr class="${cls}"><td${cls === "nested" ? ' class="nested"' : ""}>${escape(name)}` +
       `<div class="bar" style="width:${Math.max(0, Math.min(100, (100 * cost) / widest))}%"></div></td>` +
-      `<td class="value">${kwh.toFixed(1)} kWh</td><td class="value">${money(cost, unit)}</td></tr>`;
+      `<td class="value">${numbers.format(Number(kwh.toFixed(1)))} kWh</td>` +
+      `<td class="value">${numbers.format(Math.round(cost))} ${escape(unit)}</td></tr>`;
     const body = rows.map((row) => cells(row.name, row.kwh, row.cost, row.nested ? "nested" : "device"));
     if (house) {
-      body.push(cells("Rest of the house", Math.max(house.kwh - accountedKwh, 0), Math.max(house.cost - accounted, 0), "rest"));
-      body.push(cells("House", house.kwh, house.cost, "total"));
+      body.push(cells(t(hass, "rest_of_house"), Math.max(house.kwh - accountedKwh, 0), Math.max(house.cost - accounted, 0), "rest"));
+      body.push(cells(t(hass, "house"), house.kwh, house.cost, "total"));
     }
     this.shadowRoot.innerHTML =
       `<style>${STYLE}</style><ha-card>${title}<table>` +
-      `<tr><th>Device</th><th>Energy</th><th>Cost</th></tr>${body.join("")}</table></ha-card>`;
+      `<tr><th>${escape(t(hass, "device"))}</th><th>${escape(t(hass, "energy"))}</th><th>${escape(t(hass, "cost"))}</th></tr>` +
+      `${body.join("")}</table></ha-card>`;
   }
 
   _house() {
@@ -111,10 +117,6 @@ class HassEnergyDevicesCard extends HTMLElement {
     if (!cost || !kwh || cost.state === "unavailable" || kwh.state === "unavailable") return null;
     return { cost: Number(cost.state) || 0, kwh: Number(kwh.state) || 0 };
   }
-}
-
-function money(value, unit) {
-  return `${Math.round(value).toLocaleString()} ${unit}`.trim();
 }
 
 function escape(text) {

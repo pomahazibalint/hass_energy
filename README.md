@@ -77,14 +77,16 @@ there and reported through the same repair.
 The integration brings its own dashboard. Create it from **Settings >
 Dashboards > Add dashboard**, where **Energy settlement** is listed among
 the custom dashboards; it builds itself from your metering points and needs
-no configuration. It has a **Bill** view, the settlement as an invoice; a
-**Usage** view, the native energy cards beside the integration's house
-consumption, consumption cost and solar value statistics; a **Devices**
-view, energy and cost per device over the settlement period with the rest
-of the house, and the device costs over any range the energy date picker
-selects; a **History** view, each grid meter and the house by calendar
-month, this year over the two before it, and past settlements; and an
-**Outlook** view with the projections and the solar and battery figures.
+no configuration. It has three views. **Settlement** is the invoice beside
+the outlook: the projections, and the solar and battery figures. **Usage**
+is the native energy cards for the selected range, the usage graph, the
+distribution or sankey, the solar graph, the gauges, the sources table and
+the device graphs, beside the integration's own figures and a table of
+energy and cost per device over the settlement period with the rest of the
+house. **History** is each grid meter and the house by calendar month, this
+year over the two before it, and past settlements. The integration and the
+dashboard are in English and Hungarian, following your Home Assistant
+language.
 
 Where the period is heading is projected along last year's shape: the
 remaining days follow the same days a year earlier, scaled by how this

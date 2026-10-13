@@ -93,8 +93,9 @@ def source_stale(
         "source_stale",
         active=bool(stale),
         placeholders={
+            # Words belong to the translation; the placeholder carries data.
             "entities": ", ".join(
-                f"{source} (last {dt_util.as_local(last).isoformat(timespec='minutes')})"
+                f"{source} ({dt_util.as_local(last).isoformat(timespec='minutes')})"
                 if last
                 else source
                 for source, last in stale.items()
@@ -162,9 +163,9 @@ def device_bursts(hass: HomeAssistant, entry_id: str, bursts: dict[str, tuple[in
         "device_bursts",
         active=bool(bursts),
         placeholders={
+            # Words belong to the translation; the placeholder carries data.
             "devices": "; ".join(
-                f"{name}: {hours} hour{'s' if hours != 1 else ''}, {excess:.1f} kWh above the house"
-                for name, (hours, excess) in bursts.items()
+                f"{name} ({hours} h, {excess:.1f} kWh)" for name, (hours, excess) in bursts.items()
             ),
         },
     )

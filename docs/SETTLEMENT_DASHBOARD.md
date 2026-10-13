@@ -1,15 +1,17 @@
 # Settlement dashboard
 
-Status, 13 October 2026: the first two releases below, house consumption
-and solar value, and consumption cost and devices, are implemented on
-`main` and not yet released. The two that follow are not started. Things
-the implementation settled that the plan had left open are recorded where
-they belong: the house's figures begin only where the grid record and every
-named household source exist, an hour that carries the seeded remainder is
-left out of every statistic, a device's figures begin at its own first hour
-without gating the house's, and the house's consumption cost is a statistic
-and a sensor of its own; see "Sources", "Consumption cost and devices" and
-"Edge cases".
+Status, 13 October 2026: the first three releases below, house consumption
+and solar value, consumption cost and devices, and projections, are
+implemented on `main` and not yet released. The dashboard is not started.
+Things the implementation settled that the plan had left open are recorded
+where they belong: the house's figures begin only where the grid record and
+every named household source exist, an hour that carries the seeded
+remainder is left out of every statistic, a device's figures begin at its
+own first hour without gating the house's, the house's consumption cost is a
+statistic and a sensor of its own, the allowance's exhaustion date is when
+it is gone for good, and the battery charges before it discharges within an
+hour; see "Sources", "Consumption cost and devices", "Projections by season",
+"Battery what-if" and "Edge cases".
 
 A plan to give the integration the figures Home Assistant's energy dashboard
 cannot produce, and a dashboard of its own that shows them beside the parts of
@@ -150,12 +152,17 @@ szaldó household reaches ten years after commissioning, so the simulation
 prices under gross terms whatever the entry's mode is, and says so.
 
 The simulation is an optional capacity and round-trip efficiency in the
-options. Each hour's export charges the battery up to its capacity, each
-hour's import discharges it, and the resulting hours are priced under gross
-settlement with the entry's prices. The saving is the gross bill of the real
-hours less the gross bill of the simulated ones, a sensor for the period that
-is unavailable when no capacity is configured. It builds on the counterfactual
-machinery of the solar value and adds nothing to the reader.
+options, a step of their own in the options menu, where a capacity of zero
+is no battery. Each hour's export charges the battery up to its capacity,
+each hour's import discharges it with the round-trip loss taken on the way
+out, and an hour with both is charged first, since the order within the hour
+is unknown and a battery is there to catch what would have left. The
+resulting hours are priced under gross settlement with the entry's prices.
+The saving is the gross bill of the real hours less the gross bill of the
+simulated ones, a sensor for the period that is unavailable when no capacity
+is configured, and whose name says it is priced under gross settlement. It
+builds on the counterfactual machinery of the solar value and adds nothing
+to the reader.
 
 ### Consumption cost and devices
 
@@ -213,8 +220,23 @@ straight-line rate of this period, so a household in its first year gets the
 projection the generator makes today and nothing worse. The projected hours
 run through the engine like any other, which gives the projected bill, the
 projected billed energy and the date the allowance runs out, each as a sensor
-and each unknown when the projection does not reach the limit at all. The
-generator's projections package is unchanged; this is the integration route.
+and the date unknown when the projection does not reach the limit at all.
+The generator's projections package is unchanged; this is the integration
+route.
+
+What the implementation settled. The ratio is per meter, over this period's
+complete days that the recorder saw against the same days last year, so a
+household whose panels are new scales its import from last year and takes
+its export from the straight line. Today counts for the fraction of it still
+to come. The straight-line rate is the bill's readings over the days elapsed,
+so a seeded remainder counts in it; the shape is only what the recorder saw.
+A projected day settles as one hour at the day's start, since the allocation
+assigns an hour to a price period by its local day and a day's shape within
+itself is not projected. The allowance runs out when it is gone for good:
+under szaldó export can restore allowance that earlier import used, so the
+date is the hour after the last one with any left, not the first that
+reaches zero. The three sensors are measurements rather than totals, because
+a projection is re-estimated, not accumulated.
 
 The same daily reads give the long view: the same period last year and the
 monthly profile across years are the native statistics, read for a longer
@@ -332,10 +354,13 @@ second walk of the same ledger `allocate` uses, `marginal`, which prices any
 hour against any alternative for that hour alone, and the no-consumption
 alternative is a method on the hour's flows beside the no-solar one.
 
-Projections. Next. The daily reader, the seasonal projection and its
-sensors, and the battery what-if with its options.
+Projections. Done. The daily reader, the seasonal projection and its
+sensors, and the battery what-if with its options. The engine gained a
+projection module, the allowance left after each hour on the allocation's
+hourly figures, a one-shot settlement for callers that want only the end,
+and the battery beside the other counterfactuals on the hour's flows.
 
-The dashboard. The strategy module, its registration, the Bill card and
+The dashboard. Next. The strategy module, its registration, the Bill card and
 the Usage and Outlook views. The Devices and History cards follow in the
 release after, once the first card has shown what a plain module costs to
 maintain.

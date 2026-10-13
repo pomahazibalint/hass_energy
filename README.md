@@ -79,7 +79,11 @@ Dashboards > Add dashboard**, where **Energy settlement** is listed among
 the custom dashboards; it builds itself from your metering points and needs
 no configuration. It has a **Bill** view, the settlement as an invoice; a
 **Usage** view, the native energy cards beside the integration's house
-consumption, consumption cost and solar value statistics; and an
+consumption, consumption cost and solar value statistics; a **Devices**
+view, energy and cost per device over the settlement period with the rest
+of the house, and the device costs over any range the energy date picker
+selects; a **History** view, each grid meter and the house by calendar
+month, this year over the two before it, and past settlements; and an
 **Outlook** view with the projections and the solar and battery figures.
 
 Where the period is heading is projected along last year's shape: the

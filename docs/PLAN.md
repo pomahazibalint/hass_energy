@@ -28,7 +28,7 @@ Build a generator-driven Home Assistant energy accounting system with Hungarian 
 - [x] Diagnostics
 - [x] Projections
 - [x] Executive dashboard, as the integration's Bill and Outlook views
-- [ ] Device dashboard, the Devices view of the integration's dashboard
+- [x] Device dashboard, as the Devices view of the integration's dashboard
 - [x] Solar dashboard, as the integration's Usage view
 - [ ] Diagnostics dashboard
 - [x] Tests
@@ -62,9 +62,9 @@ directory and needs nothing at runtime.
 
 The integration ships a dashboard of its own, a strategy the user creates
 from Home Assistant's new-dashboard dialog, with the settlement as an
-invoice, the native usage cards beside the integration's statistics, and
-the outlook. The Devices and History views of that dashboard, and a
-diagnostics view on the generator route, are the remaining feature work.
+invoice, the native usage cards beside the integration's statistics, the
+devices, the long view by month across years, and the outlook. A
+diagnostics view on the generator route is the remaining feature work.
 
 [RECORDER_BACKED_SETTLEMENT.md](RECORDER_BACKED_SETTLEMENT.md) records why
 the integration reads the recorder rather than keeping its own record of
@@ -75,7 +75,7 @@ the integration route and records how far it has got: house consumption and
 solar value from the energy dashboard's own sources, the cost of consuming
 with each device's share of it, projections that follow last year's shape,
 the battery what-if, and the dashboard that shows them beside the native
-cards are done; the dashboard's Devices and History cards are to come.
+cards are done, Devices and History views included. The plan is complete.
 
 ## Ideas backlog
 - Tariff plugins, only when a second tariff arrives with a real user

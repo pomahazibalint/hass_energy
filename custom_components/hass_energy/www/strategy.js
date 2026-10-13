@@ -17,15 +17,16 @@ class HassEnergyDashboardStrategy {
   }
 
   static async generate(config, hass) {
-    const [entries, registry, statistics] = await Promise.all([
+    const [entries, registry, statistics, prefs] = await Promise.all([
       hass.callWS({ type: "config_entries/get", domain: DOMAIN }),
       hass.callWS({ type: "config/entity_registry/list" }),
       hass.callWS({ type: "recorder/list_statistic_ids" }),
+      hass.callWS({ type: "energy/get_prefs" }).catch(() => null),
     ]);
     const loaded = entries.filter((entry) => entry.state === "loaded");
     const views = [];
     loaded.forEach((entry, index) => {
-      views.push(...viewsFor(entry, registry, statistics, index, loaded.length > 1));
+      views.push(...viewsFor(entry, registry, statistics, prefs, index, loaded.length > 1));
     });
     if (!views.length) {
       views.push({
@@ -73,8 +74,26 @@ function statisticOf(entry, statistics, kind) {
   return match?.statistic_id;
 }
 
-function viewsFor(entry, registry, statistics, index, several) {
-  const { byLine } = entitiesOf(entry, registry);
+// The grid meters the energy dashboard names: the long view is theirs,
+// since they are the record and reach back to before the integration.
+// Home Assistant 2026.10 gave the grid source one import and one export
+// statistic; before that it carried lists of flows, and a stored document
+// keeps the old shape until it is next saved.
+function gridOf(prefs) {
+  const imported = [];
+  const exported = [];
+  for (const source of prefs?.energy_sources || []) {
+    if (source.type !== "grid") continue;
+    imported.push(...(source.flow_from || []).map((flow) => flow.stat_energy_from));
+    exported.push(...(source.flow_to || []).map((flow) => flow.stat_energy_to));
+    if (source.stat_energy_from) imported.push(source.stat_energy_from);
+    if (source.stat_energy_to) exported.push(source.stat_energy_to);
+  }
+  return { imported, exported };
+}
+
+function viewsFor(entry, registry, statistics, prefs, index, several) {
+  const { byLine, devices } = entitiesOf(entry, registry);
   const suffix = index ? `-${index + 1}` : "";
   const prefix = several ? `${entry.title}: ` : "";
   const present = (lines) => lines.map((line) => byLine[line]).filter(Boolean);
@@ -153,7 +172,77 @@ function viewsFor(entry, registry, statistics, index, several) {
     ].filter((card) => card.entities.length),
   };
 
-  return [bill, usage, outlook];
+  const deviceStatistics = statistics
+    .filter(
+      (one) =>
+        one.source === DOMAIN &&
+        one.statistic_id.includes(`${entry.entry_id}_device_`) &&
+        one.statistic_id.endsWith("_cost")
+    )
+    .map((one) => one.statistic_id);
+  const devicesView = {
+    title: `${prefix}Devices`,
+    path: `devices${suffix}`,
+    icon: "mdi:power-plug",
+    cards: [
+      {
+        type: "custom:hass-energy-devices-card",
+        title: "This settlement period",
+        devices,
+        entities: Object.fromEntries(
+          Object.entries(byLine).filter(([line]) =>
+            ["consumption_cost", "house_consumption"].includes(line)
+          )
+        ),
+      },
+      ...(deviceStatistics.length
+        ? [
+            { type: "energy-date-selection" },
+            {
+              type: "statistics-graph",
+              title: "Device cost over the selected range",
+              entities: deviceStatistics,
+              stat_types: ["change"],
+              chart_type: "bar",
+              period: "day",
+              energy_date_selection: true,
+            },
+          ]
+        : []),
+    ],
+  };
+
+  const grid = gridOf(prefs);
+  const history = (title, statistic) =>
+    statistic ? [{ type: "custom:hass-energy-history-card", title, statistic, years: 3 }] : [];
+  const settled = ["settlement_cost", "imported_energy"]
+    .map((kind) => statisticOf(entry, statistics, kind))
+    .filter(Boolean);
+  const historyView = {
+    title: `${prefix}History`,
+    path: `history${suffix}`,
+    icon: "mdi:history",
+    cards: [
+      ...history("Grid import by month", grid.imported[0]),
+      ...history("Grid export by month", grid.exported[0]),
+      ...history("House consumption by month", statisticOf(entry, statistics, "house_consumption")),
+      ...(settled.length
+        ? [
+            {
+              type: "statistics-graph",
+              title: "Past settlements",
+              entities: settled,
+              stat_types: ["change"],
+              chart_type: "bar",
+              period: "month",
+              days_to_show: 1500,
+            },
+          ]
+        : []),
+    ],
+  };
+
+  return [bill, usage, devicesView, historyView, outlook];
 }
 
 const BILL_LINES = [

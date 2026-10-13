@@ -36,6 +36,8 @@ async def test_the_modules_are_served_from_the_integration(
         ("hass-energy.js", 'import "./strategy.js"'),
         ("strategy.js", "ll-strategy-dashboard-hass-energy"),
         ("bill-card.js", "hass-energy-bill-card"),
+        ("devices-card.js", "hass-energy-devices-card"),
+        ("history-card.js", "hass-energy-history-card"),
     ):
         response = await client.get(f"{base}/{module}")
         assert response.status == 200, module

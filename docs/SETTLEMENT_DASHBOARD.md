@@ -1,8 +1,8 @@
 # Settlement dashboard
 
-Status, 13 October 2026: all four releases below are implemented on `main`
-and not yet released. What remains of the plan is the Devices and History
-cards, which the fourth release deferred to the one after it. Things the
+Status, 13 October 2026: everything below is implemented and released,
+the four releases and the Devices and History cards the fourth deferred.
+The plan is complete; what follows it is use. Things the
 implementation settled that the plan had left open are recorded where they
 belong: the house's figures begin only where the grid record and every named
 household source exist, an hour that carries the seeded remainder is left
@@ -11,9 +11,11 @@ without gating the house's, the house's consumption cost is a statistic and
 a sensor of its own, the allowance's exhaustion date is when it is gone for
 good, the battery charges before it discharges within an hour, and a
 strategy is a custom element with a listing in `window.customStrategies`
-rather than a registration there; see "Sources", "Consumption cost and
-devices", "Projections by season", "Battery what-if", "The dashboard" and
-"Edge cases".
+rather than a registration there, the Devices card shows the settlement
+period and leaves the selected range to a native graph, and the History
+card is hand-drawn SVG; see "Sources", "Consumption cost and devices",
+"Projections by season", "Battery what-if", "The dashboard" and "Edge
+cases".
 
 A plan to give the integration the figures Home Assistant's energy dashboard
 cannot produce, and a dashboard of its own that shows them beside the parts of
@@ -291,12 +293,23 @@ Usage: the native date selector, usage graph and distribution, sharing one
 collection key, with the integration's cost statistics as the costs and the
 house consumption statistic beside them. No custom code.
 
-Devices: energy and cost per device for the selected range. One custom card,
-reading the device cost statistics.
+Devices: energy and cost per device. One custom card for the settlement
+period, reading the device cost sensors, which carry the device's name, its
+energy and the device it is included in, so the card shows the hierarchy
+rather than summing a parent and its child together, and the part no device
+accounts for as the rest of the house. The selected range is the native
+statistics graph's, over the device cost statistics and following the
+energy date picker: a custom card could follow the picker only through the
+frontend's internal energy collection, which this plan does not touch, and
+the settlement period is the question the integration answers.
 
-History: the same period last year overlaid on this one, and the monthly
-profile across years, from the native statistics. One custom card for the
-overlay; the native statistics graph for the rest.
+History: the same calendar months this year over the years before it, from
+the native statistics, read over the websocket by month and drawn as
+grouped bars. One custom card per statistic, for the grid meters the
+dashboard names and the house consumption; the native statistics graph for
+past settlements, from the statistics the invoice import writes. The bars
+are plain SVG: the rule for adding a chart library is that a card needs
+one, and grouped bars do not.
 
 Outlook: the projected bill, energy and allowance date, and the battery and
 solar figures. Native cards over sensors.
@@ -382,9 +395,13 @@ and the Usage and Outlook views. The module is served from the
 integration's `www` directory under a URL carrying the version, the
 `frontend` and `http` components became dependencies, and the workflow
 parses each module with node, since that is the only check a plain module
-without a build step can have. The Devices and History cards follow in the
-release after, once the first card has shown what a plain module costs to
-maintain.
+without a build step can have.
+
+The Devices and History cards. Done, in the release after, as planned. The
+Bill card had shown that a plain module is a hundred lines to own and
+nothing to build, and the two cards followed the same shape. The device
+cost sensors gained the device's name as an attribute so the Devices card
+needs no registry lookup.
 
 The engine's new rules, the counterfactual, the hourly consumption cost and
 the seasonal projection, are tested in `tests/` without Home Assistant. The

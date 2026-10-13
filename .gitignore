@@ -14,3 +14,7 @@ dist/
 /config.yaml
 /config.yml
 /packages/
+
+# Local secrets for scripts/inspect_hours.py and the like
+hass_token.txt
+*.token

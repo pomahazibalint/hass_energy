@@ -3,4 +3,6 @@
 // step; this one only loads the others, so the backend serves a single URL.
 
 import "./bill-card.js";
+import "./devices-card.js";
+import "./history-card.js";
 import "./strategy.js";

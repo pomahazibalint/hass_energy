@@ -376,8 +376,11 @@ class DeviceCostSensor(CoordinatorEntity[SettlementCoordinator], SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
+        """What a card needs to list the device: its name, its energy, its place."""
+
         device = self.device
         return {
+            "device": device.name if device else self.statistic,
             "statistic": self.statistic,
             "included_in": (device.included_in if device else None) or "",
             "energy_kwh": f"{self.coordinator.device_kwh_total(self.statistic):.3f}",

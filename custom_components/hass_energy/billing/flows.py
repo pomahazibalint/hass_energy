@@ -111,6 +111,41 @@ class Flows(Hour):
         )
 
 
+def with_battery(
+    hours: Sequence[Hour], capacity_kwh: float, round_trip_efficiency: float
+) -> list[Hour]:
+    """The grid flows there would have been with a battery behind the meter.
+
+    Each hour's export charges it up to its capacity and each hour's import
+    draws it down, with the round-trip loss taken on the way out. An hour
+    with both is charged first, since the order within the hour is unknown
+    and a battery is there to catch what would have left. Under szaldó this
+    is worth close to nothing, because annual netting is a free battery;
+    the question matters for the switch to gross settlement, which every
+    szaldó household reaches.
+    """
+
+    if capacity_kwh < 0:
+        raise ValueError("A battery cannot have negative capacity.")
+    if not 0 < round_trip_efficiency <= 1:
+        raise ValueError("Round-trip efficiency is a fraction above zero and up to one.")
+    stored = 0.0
+    simulated: list[Hour] = []
+    for hour in hours:
+        charged = min(hour.exported_kwh, capacity_kwh - stored)
+        stored += charged
+        discharged = min(hour.imported_kwh, stored * round_trip_efficiency)
+        stored -= discharged / round_trip_efficiency
+        simulated.append(
+            Hour(
+                hour.start,
+                imported_kwh=hour.imported_kwh - discharged,
+                exported_kwh=hour.exported_kwh - charged,
+            )
+        )
+    return simulated
+
+
 def device_share(device_kwh: float, consumption_kwh: float) -> tuple[float, float]:
     """A device's share of an hour's consumption, and what it claims beyond it.
 

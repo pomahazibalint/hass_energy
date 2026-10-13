@@ -21,6 +21,9 @@ CONF_MODE: Final = "mode"
 CONF_ALLOWANCE_BASIS: Final = "allowance_basis"
 CONF_CURRENCY: Final = "currency"
 CONF_PRICES: Final = "prices"
+#: The battery what-if: a capacity of zero is no battery.
+CONF_BATTERY_CAPACITY_KWH: Final = "battery_capacity_kwh"
+CONF_BATTERY_EFFICIENCY_PERCENT: Final = "battery_efficiency_percent"
 #: Dropped by the entry migration to version 2: the record it limited is gone.
 RETIRED_OPTIONS: Final = ("max_step_kwh",)
 #: Sensor keys that 0.4.0 kept behind a repair issue and 0.5.0 removed. Their
@@ -55,3 +58,4 @@ DEFAULT_CURRENCY: Final = "Ft"
 DEFAULT_SUBSIDIZED: Final = 36.386
 DEFAULT_MARKET: Final = 70.104
 DEFAULT_FEED_IN: Final = 5.11
+DEFAULT_BATTERY_EFFICIENCY_PERCENT: Final = 90.0

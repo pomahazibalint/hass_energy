@@ -291,6 +291,22 @@ go with the preferences, and a device that claims more than the whole house
 used is capped there and reported through the same repair as the house's
 own disagreement.
 
+The period is projected along last year's shape rather than a straight
+line, because a straight line is least reliable across a change of season,
+which is when knowing whether the allowance will hold matters most. The
+remaining days are the same calendar days a year earlier, read from the
+recorder's daily statistics, scaled per meter by this period's complete days
+against theirs; a day last year knows nothing about is the straight line of
+this period, so a first year gets what the generator's projection gives and
+nothing worse. The projected days settle through the same engine as the
+hours, which is what gives the projected bill and the date the allowance is
+gone for good, unknown when it holds. The battery what-if is the one
+counterfactual that adds nothing to the reader: an optional capacity and
+efficiency turn the real hours into the hours a battery would have left, and
+both are priced under gross settlement whatever the entry's mode, because
+under szaldó annual netting is a free battery and the question is what the
+switch will cost.
+
 Testing needs Home Assistant, so those tests live in `tests/integration` and run
 in the workflow job that installs it. They put hours into the recorder directly
 and run on a frozen clock. The engine's own tests need nothing and run

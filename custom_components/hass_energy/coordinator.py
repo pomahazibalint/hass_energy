@@ -19,8 +19,7 @@ import logging
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import date, datetime, timedelta
-from functools import partial
+from datetime import date, datetime, timedelta, tzinfo
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -37,15 +36,26 @@ from homeassistant.util import dt as dt_util
 from . import issues
 from .billing import (
     Bill,
+    Day,
     Flows,
+    Hour,
     HourCost,
     Prices,
+    PriceSchedule,
+    SettlementMode,
     SettlementPeriod,
+    TariffTerms,
+    a_year_before,
     allocate,
+    allowance_runs_out,
     device_share,
     forint,
+    hours_of,
     marginal,
+    project,
+    settle,
     solar_value,
+    with_battery,
 )
 from .const import (
     CONF_EXPORT_ENTITY,
@@ -66,9 +76,15 @@ from .costs import (
     async_publish,
     device_kind,
 )
-from .history import Observed, async_observe
+from .history import Observed, async_observe, async_observe_days
 from .preferences import Sources, async_follow, async_sources
-from .settings import schedule_from_options, standing_charge_months, terms_from_options
+from .settings import (
+    Battery,
+    battery_from_options,
+    schedule_from_options,
+    standing_charge_months,
+    terms_from_options,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -103,6 +119,95 @@ class Disagreement:
             lost_kwh=sum(failing.values()),
             worst=max(failing, key=lambda start: failing[start]),
         )
+
+
+@dataclass(frozen=True)
+class Contract:
+    """The terms every settlement in a refresh is run under."""
+
+    period: SettlementPeriod
+    schedule: PriceSchedule
+    terms: TariffTerms
+    standing_charge_months: int
+    tz: tzinfo
+
+    def allocate(self, hours: Sequence[Hour]) -> tuple[Bill, list[HourCost]]:
+        return allocate(
+            self.period,
+            hours,
+            self.schedule,
+            self.terms,
+            standing_charge_months=self.standing_charge_months,
+            tz=self.tz,
+        )
+
+    def marginal(self, hours: Sequence[Hour], instead: Sequence[Hour]) -> list[float]:
+        return marginal(
+            self.period,
+            hours,
+            instead,
+            self.schedule,
+            self.terms,
+            standing_charge_months=self.standing_charge_months,
+            tz=self.tz,
+        )
+
+    def settle(self, hours: Sequence[Hour], terms: TariffTerms | None = None) -> Bill:
+        return settle(
+            self.period,
+            hours,
+            self.schedule,
+            terms or self.terms,
+            standing_charge_months=self.standing_charge_months,
+            tz=self.tz,
+        )
+
+
+@dataclass(frozen=True)
+class Outlook:
+    """Where the period is heading, following last year's shape."""
+
+    #: The bill the period lands on.
+    bill: Bill
+    #: When the allowance is gone for good, or None when it holds.
+    allowance_runs_out: datetime | None
+    #: Days still to come, and how many of them last year's shape covers;
+    #: the rest are the straight line.
+    days_remaining: int
+    days_from_last_year: int
+
+    @property
+    def runs_out_on(self) -> date | None:
+        if self.allowance_runs_out is None:
+            return None
+        return dt_util.as_local(self.allowance_runs_out).date()
+
+
+def _outlook(
+    contract: Contract,
+    hours: Sequence[Hour],
+    projected: Sequence[Day],
+    days_from_last_year: int,
+) -> Outlook:
+    """Settle the hours so far and the days still to come as one period."""
+
+    bill, costs = contract.allocate([*hours, *hours_of(projected, contract.tz)])
+    return Outlook(bill, allowance_runs_out(costs), len(projected), days_from_last_year)
+
+
+def _battery_saving(contract: Contract, hours: Sequence[Hour], battery: Battery) -> int:
+    """What a battery would have saved, priced under gross settlement.
+
+    Whatever the entry's mode: under szaldó the figure is near zero by
+    construction, and the question matters for the switch.
+    """
+
+    gross = replace(contract.terms, mode=SettlementMode.BRUTTO)
+    real = contract.settle(hours, gross)
+    simulated = contract.settle(
+        with_battery(hours, battery.capacity_kwh, battery.round_trip_efficiency), gross
+    )
+    return real.net_position - simulated.net_position
 
 
 @dataclass
@@ -182,6 +287,9 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         #: house.
         self.seeded: set[datetime] = set()
         self.disagreement = Disagreement()
+        #: Where the period is heading, and what a battery would have saved.
+        self.outlook: Outlook | None = None
+        self.battery_saving: int | None = None
 
     @property
     def import_entity(self) -> str:
@@ -255,16 +363,15 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
                 f"No prices are known for {self.state.start}, when the settlement period began."
             )
 
-        period = SettlementPeriod(self.state.start, self.period_end())
-        hours, self.seeded = self._with_unobserved(observed)
-        schedule = schedule_from_options(self.entry.options)
-        terms = terms_from_options(self.entry.options)
-        months = standing_charge_months(self.entry.options)
-        tz = dt_util.get_default_time_zone()
-        settle = partial(
-            allocate, period, schedule=schedule, terms=terms, standing_charge_months=months, tz=tz
+        contract = Contract(
+            SettlementPeriod(self.state.start, self.period_end()),
+            schedule_from_options(self.entry.options),
+            terms_from_options(self.entry.options),
+            standing_charge_months(self.entry.options),
+            dt_util.get_default_time_zone(),
         )
-        bill, self.costs = await self.hass.async_add_executor_job(settle, hours)
+        hours, self.seeded = self._with_unobserved(observed)
+        bill, self.costs = await self.hass.async_add_executor_job(contract.allocate, hours)
 
         # What each hour's consumption cost: what not consuming in that hour
         # would have saved, with every earlier hour as it was. A device's
@@ -272,25 +379,24 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         # yet, the one hour settled is the seed's rather than the recorder's,
         # and no figure of the house is built on it.
         costs = await self.hass.async_add_executor_job(
-            partial(
-                marginal,
-                period,
-                hours,
-                [hour.without_consumption() for hour in hours],
-                schedule,
-                terms,
-                standing_charge_months=months,
-                tz=tz,
-            )
+            contract.marginal, hours, [hour.without_consumption() for hour in hours]
         )
         self.consumption_costs = costs if observed.hours else []
         self.device_costs = self._device_costs(observed)
+
+        self.outlook = await self._project(contract, hours, bill, observed)
+        battery = battery_from_options(self.entry.options)
+        self.battery_saving = (
+            await self.hass.async_add_executor_job(_battery_saving, contract, hours, battery)
+            if battery
+            else None
+        )
 
         # The panels' worth is the bill there would have been without them.
         # Without a production source there is no counterfactual to run.
         if self.sources.production:
             self.bill_without_solar, without = await self.hass.async_add_executor_job(
-                settle, [hour.without_solar() for hour in hours]
+                contract.allocate, [hour.without_solar() for hour in hours]
             )
             self.solar_values = solar_value(self.costs, without)
         else:
@@ -387,8 +493,7 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
 
         end = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
         roles = {
-            "imported": (self.import_entity,),
-            "exported": (self.export_entity,) if self.export_entity else (),
+            **self._grid_roles(),
             "produced": self.sources.production,
             "charged": self.sources.charge,
             "discharged": self.sources.discharge,
@@ -400,6 +505,59 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             end,
             devices=[device.statistic for device in self.sources.devices],
         )
+
+    async def _project(
+        self, contract: Contract, hours: Sequence[Hour], bill: Bill, observed: Observed
+    ) -> Outlook:
+        """Where the period is heading.
+
+        The days still to come follow the same days a year earlier, scaled
+        by this period's complete days against theirs, and the straight
+        line of this period wherever last year is silent. The rate is the
+        bill's readings over the days elapsed, so a seeded remainder counts
+        in it; the shape is only what the recorder saw.
+        """
+
+        now = dt_util.now()
+        today = now.date()
+        period = contract.period
+        last_year = await async_observe_days(
+            self.hass, self._grid_roles(), a_year_before(period.start), a_year_before(period.end)
+        )
+
+        so_far: dict[date, Day] = {}
+        for hour in observed.hours:
+            if observed.first is None or hour.start < observed.first:
+                continue
+            day = dt_util.as_local(hour.start).date()
+            if day >= today:
+                break
+            before = so_far.get(day, Day(day))
+            so_far[day] = Day(
+                day,
+                before.imported_kwh + hour.imported_kwh,
+                before.exported_kwh + hour.exported_kwh,
+            )
+
+        elapsed = max(self.days_elapsed(today), 1)
+        readings = bill.readings
+        rate = Day(today, readings.imported_kwh / elapsed, readings.exported_kwh / elapsed)
+        remaining: list[tuple[date, float]] = [(today, (24 - now.hour) / 24)]
+        remaining += [
+            (today + timedelta(days=offset), 1.0)
+            for offset in range(1, (period.end - today).days)
+        ]
+        projected = project(remaining, so_far, last_year, rate)
+        from_last_year = sum(a_year_before(day) in last_year for day, _ in remaining)
+        return await self.hass.async_add_executor_job(
+            _outlook, contract, hours, projected, from_last_year
+        )
+
+    def _grid_roles(self) -> dict[str, tuple[str, ...]]:
+        return {
+            "imported": (self.import_entity,),
+            "exported": (self.export_entity,) if self.export_entity else (),
+        }
 
     def _device_excess(self, observed: Observed) -> dict[str, list[float]]:
         """What each device claimed above the whole house, hour by hour.

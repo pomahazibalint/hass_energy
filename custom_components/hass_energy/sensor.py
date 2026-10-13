@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -37,7 +38,7 @@ KWH = UnitOfEnergy.KILO_WATT_HOUR
 class SettlementSensorDescription(SensorEntityDescription):
     """A line of the settlement and how to read it off the bill."""
 
-    value: Callable[[SettlementCoordinator], float | int]
+    value: Callable[[SettlementCoordinator], float | int | date | None]
     #: Currency lines take their unit from the contract rather than a constant.
     monetary: bool = False
     #: A price rather than an amount, so the unit carries the kWh.
@@ -195,6 +196,43 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         available=lambda c: c.consumption_cost_total() is not None,
         value=lambda c: c.consumption_cost_total() or 0,
     ),
+    # Where the period is heading, following last year's shape where it is
+    # known and the straight line where it is not. Measurements rather than
+    # totals: a projection is re-estimated, not accumulated.
+    SettlementSensorDescription(
+        key="projected_total_payable",
+        translation_key="projected_total_payable",
+        state_class=SensorStateClass.MEASUREMENT,
+        monetary=True,
+        available=lambda c: c.outlook is not None,
+        value=lambda c: c.outlook.bill.gross_total if c.outlook else None,
+    ),
+    SettlementSensorDescription(
+        key="projected_billed_energy",
+        translation_key="projected_billed_energy",
+        native_unit_of_measurement=KWH,
+        state_class=SensorStateClass.MEASUREMENT,
+        available=lambda c: c.outlook is not None,
+        value=lambda c: round(c.outlook.bill.billed_kwh, 3) if c.outlook else None,
+    ),
+    # Unknown rather than a fabricated date when the allowance holds.
+    SettlementSensorDescription(
+        key="allowance_runs_out",
+        translation_key="allowance_runs_out",
+        device_class=SensorDeviceClass.DATE,
+        available=lambda c: c.outlook is not None,
+        value=lambda c: c.outlook.runs_out_on if c.outlook else None,
+    ),
+    # What a battery would have saved, under gross settlement whatever the
+    # entry's mode: under szaldó annual netting is a free battery.
+    SettlementSensorDescription(
+        key="battery_saving",
+        translation_key="battery_saving",
+        state_class=SensorStateClass.MEASUREMENT,
+        monetary=True,
+        available=lambda c: c.battery_saving is not None,
+        value=lambda c: c.battery_saving,
+    ),
 )
 
 
@@ -260,7 +298,7 @@ class SettlementSensor(CoordinatorEntity[SettlementCoordinator], SensorEntity):
         return super().available and self.entity_description.available(self.coordinator)
 
     @property
-    def native_value(self) -> float | int:
+    def native_value(self) -> float | int | date | None:
         return self.entity_description.value(self.coordinator)
 
     @property

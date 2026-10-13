@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from functools import partial
 
 from homeassistant.components.recorder.statistics import (
@@ -24,7 +24,7 @@ from homeassistant.components.recorder.util import get_instance  # type: ignore[
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .billing import Flows
+from .billing import Day, Flows
 
 KWH = "kWh"
 
@@ -167,3 +167,38 @@ async def async_observe(
             for device in devices
         },
     )
+
+
+async def async_observe_days(
+    hass: HomeAssistant, roles: Mapping[str, Sequence[str]], start: date, end: date
+) -> dict[date, Day]:
+    """Read what the grid meters did per local day between two dates, in kWh.
+
+    For the projection's long view: the same days a year earlier, which the
+    recorder already holds as statistics, reduced to days the way the
+    dashboard's own day view reduces them. A day without a row is absent,
+    not zero, because the projection has to know the difference.
+    """
+
+    sources = [source for role in GRID_ROLES for source in roles.get(role, ())]
+    rows = await get_instance(hass).async_add_executor_job(
+        statistics_during_period,
+        hass,
+        dt_util.as_utc(dt_util.start_of_local_day(start)),
+        dt_util.as_utc(dt_util.start_of_local_day(end)),
+        set(sources),
+        "day",
+        {"energy": KWH},
+        {"change"},
+    )
+    totals: dict[date, dict[str, float]] = {}
+    for role in GRID_ROLES:
+        for source in roles.get(role, ()):
+            for row in rows.get(source, []):
+                day = dt_util.as_local(dt_util.utc_from_timestamp(row["start"])).date()
+                per_role = totals.setdefault(day, {})
+                per_role[role] = per_role.get(role, 0.0) + max(row.get("change") or 0.0, 0.0)
+    return {
+        day: Day(day, per_role.get("imported", 0.0), per_role.get("exported", 0.0))
+        for day, per_role in sorted(totals.items())
+    }

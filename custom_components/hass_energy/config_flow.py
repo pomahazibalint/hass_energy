@@ -15,6 +15,8 @@ from .billing import AllowanceBasis, SettlementMode
 from .const import (
     CONF_ALLOWANCE_BASIS,
     CONF_ALLOWANCE_KWH,
+    CONF_BATTERY_CAPACITY_KWH,
+    CONF_BATTERY_EFFICIENCY_PERCENT,
     CONF_CURRENCY,
     CONF_EXPORT_ENTITY,
     CONF_FEED_IN,
@@ -28,6 +30,7 @@ from .const import (
     CONF_VALID_FROM,
     CONF_VAT_PERCENT,
     DEFAULT_ALLOWANCE_KWH,
+    DEFAULT_BATTERY_EFFICIENCY_PERCENT,
     DEFAULT_CURRENCY,
     DEFAULT_FEED_IN,
     DEFAULT_MARKET,
@@ -89,7 +92,7 @@ class HassEnergyOptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        menu = ["terms", "prices"]
+        menu = ["terms", "prices", "battery"]
         if len(self._prices) > 1:
             menu.append("remove_price")
         return self.async_show_menu(step_id="init", menu_options=menu)
@@ -161,6 +164,42 @@ class HassEnergyOptionsFlow(OptionsFlow):
             }
         )
         return self.async_show_form(step_id="terms", data_schema=schema)
+
+    async def async_step_battery(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """The battery to ask what-if about.
+
+        Not a source: the grid meters already reflect any battery the house
+        has. This is the one it does not have, priced under gross settlement
+        whatever the entry's mode, because under szaldó annual netting is a
+        free battery and the question only matters for the switch.
+        """
+
+        options = dict(self.config_entry.options)
+        if user_input is not None:
+            options.update(user_input)
+            return self._save(options)
+
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_BATTERY_CAPACITY_KWH,
+                    default=options.get(CONF_BATTERY_CAPACITY_KWH, 0.0),
+                ): _price_number(),
+                vol.Required(
+                    CONF_BATTERY_EFFICIENCY_PERCENT,
+                    default=options.get(
+                        CONF_BATTERY_EFFICIENCY_PERCENT, DEFAULT_BATTERY_EFFICIENCY_PERCENT
+                    ),
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=1, max=100, step="any", mode=selector.NumberSelectorMode.BOX
+                    )
+                ),
+            }
+        )
+        return self.async_show_form(step_id="battery", data_schema=schema)
 
     async def async_step_prices(
         self, user_input: dict[str, Any] | None = None

@@ -23,7 +23,19 @@
         "menu_options": {
           "terms": "Contract terms",
           "prices": "Prices",
+          "battery": "Battery what-if",
           "remove_price": "Remove a price change"
+        }
+      },
+      "battery": {
+        "title": "Battery what-if",
+        "description": "A battery the house does not have, to ask what it would have saved. Priced under gross settlement whatever the settlement mode, because under szaldó annual netting is a free battery and the question matters for the switch. A capacity of zero turns the figure off.",
+        "data": {
+          "battery_capacity_kwh": "Capacity (kWh)",
+          "battery_efficiency_percent": "Round-trip efficiency (%)"
+        },
+        "data_description": {
+          "battery_efficiency_percent": "How much of what goes in comes back out."
         }
       },
       "terms": {
@@ -139,6 +151,18 @@
       },
       "device_cost": {
         "name": "{device} cost"
+      },
+      "projected_total_payable": {
+        "name": "Projected total payable"
+      },
+      "projected_billed_energy": {
+        "name": "Projected billed energy"
+      },
+      "allowance_runs_out": {
+        "name": "Allowance runs out"
+      },
+      "battery_saving": {
+        "name": "Battery saving under gross settlement"
       }
     }
   },

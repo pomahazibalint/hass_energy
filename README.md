@@ -74,6 +74,18 @@ of each hour's consumption at that hour's cost, named as the dashboard names
 them. A device meter that claims more than the whole house used is capped
 there and reported through the same repair.
 
+Where the period is heading is projected along last year's shape: the
+remaining days follow the same days a year earlier, scaled by how this
+period compares to them, and fall back to the straight line of this period
+where last year is silent. **Projected total payable**, **Projected billed
+energy** and **Allowance runs out** come from settling those days through
+the same engine; the date is unknown when the allowance holds. A **Battery
+what-if** in the options, a capacity and a round-trip efficiency, gives a
+**Battery saving under gross settlement** sensor: what a battery the house
+does not have would have saved, priced under gross terms whatever the
+settlement mode, since under szaldó annual netting already is a free
+battery.
+
 ## Quick start
 
 ```sh

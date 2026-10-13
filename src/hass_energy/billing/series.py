@@ -54,6 +54,9 @@ class HourCost:
     #: Change in what the supplier owes for surplus. Whole currency units,
     #: because the surplus is rounded per price period.
     compensation: int
+    #: Subsidized energy still to be had after the hour. Under szaldó it can
+    #: grow again, when export cancels import that had used it.
+    allowance_remaining_kwh: float = 0.0
 
 
 class _Ledger:
@@ -139,11 +142,33 @@ def allocate(
                 hour.start,
                 after.energy_gross - before.energy_gross,
                 after.surplus_net - before.surplus_net,
+                after.allowance_remaining_kwh,
             )
         )
         before = after
 
     return before, costs
+
+
+def settle(
+    period: SettlementPeriod,
+    hours: Sequence[Hour],
+    schedule: PriceSchedule,
+    terms: TariffTerms,
+    *,
+    standing_charge_months: int,
+    tz: tzinfo,
+) -> Bill:
+    """The bill after every hour, without the walk.
+
+    What ``allocate`` returns first, for a caller that wants only the end:
+    the hours are added to the ledger and billed once.
+    """
+
+    ledger = _Ledger(period, schedule, terms, standing_charge_months, tz)
+    for hour in hours:
+        ledger.add(hour)
+    return ledger.bill()
 
 
 def _position(bill: Bill) -> float:

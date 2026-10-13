@@ -8,6 +8,7 @@ without touching a single recorded quantity.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
@@ -17,6 +18,8 @@ from .billing import AllowanceBasis, Prices, PriceSchedule, SettlementMode, Tari
 from .const import (
     CONF_ALLOWANCE_BASIS,
     CONF_ALLOWANCE_KWH,
+    CONF_BATTERY_CAPACITY_KWH,
+    CONF_BATTERY_EFFICIENCY_PERCENT,
     CONF_CURRENCY,
     CONF_FEED_IN,
     CONF_MARKET,
@@ -28,6 +31,7 @@ from .const import (
     CONF_VALID_FROM,
     CONF_VAT_PERCENT,
     DEFAULT_ALLOWANCE_KWH,
+    DEFAULT_BATTERY_EFFICIENCY_PERCENT,
     DEFAULT_CURRENCY,
     DEFAULT_FEED_IN,
     DEFAULT_MARKET,
@@ -71,6 +75,27 @@ def terms_from_options(options: Mapping[str, Any]) -> TariffTerms:
         ),
         currency=str(options.get(CONF_CURRENCY, DEFAULT_CURRENCY)),
     )
+
+
+@dataclass(frozen=True)
+class Battery:
+    """The battery the what-if simulates."""
+
+    capacity_kwh: float
+    #: A fraction: what comes back out of what went in.
+    round_trip_efficiency: float
+
+
+def battery_from_options(options: Mapping[str, Any]) -> Battery | None:
+    """The battery to simulate, or None when none is configured."""
+
+    capacity = float(options.get(CONF_BATTERY_CAPACITY_KWH) or 0.0)
+    if capacity <= 0:
+        return None
+    percent = float(
+        options.get(CONF_BATTERY_EFFICIENCY_PERCENT, DEFAULT_BATTERY_EFFICIENCY_PERCENT)
+    )
+    return Battery(capacity, min(max(percent, 1.0), 100.0) / 100)
 
 
 def standing_charge_months(options: Mapping[str, Any]) -> int:

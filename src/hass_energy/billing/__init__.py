@@ -15,14 +15,16 @@ from __future__ import annotations
 
 from .bill import Bill, Line, MeterReadings, SettlementPeriod, SurplusLine, forint
 from .engine import calculate
-from .flows import Flows, device_share, solar_value
+from .flows import Flows, device_share, solar_value, with_battery
 from .prices import Prices, PriceSchedule, Segment
-from .series import Hour, HourCost, allocate, marginal
+from .projection import Day, a_year_before, allowance_runs_out, hours_of, project
+from .series import Hour, HourCost, allocate, marginal, settle
 from .terms import AllowanceBasis, SettlementMode, TariffTerms
 
 __all__ = [
     "AllowanceBasis",
     "Bill",
+    "Day",
     "Flows",
     "Hour",
     "HourCost",
@@ -35,10 +37,16 @@ __all__ = [
     "SettlementPeriod",
     "SurplusLine",
     "TariffTerms",
+    "a_year_before",
     "allocate",
+    "allowance_runs_out",
     "calculate",
     "device_share",
     "forint",
+    "hours_of",
     "marginal",
+    "project",
+    "settle",
     "solar_value",
+    "with_battery",
 ]

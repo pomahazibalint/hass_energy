@@ -231,3 +231,23 @@ async def test_a_version_one_entry_loses_its_step_limit(
     assert entry.version == 2
     assert "max_step_kwh" not in entry.options
     assert entry.state is ConfigEntryState.LOADED
+
+
+async def test_the_battery_what_if_is_an_option(
+    entry: MockConfigEntry, hass: HomeAssistant
+) -> None:
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert "battery" in result["menu_options"]
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "battery"}
+    )
+    assert result["step_id"] == "battery"
+
+    await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"battery_capacity_kwh": 10.0, "battery_efficiency_percent": 85.0},
+    )
+    await hass.async_block_till_done()
+
+    assert entry.options["battery_capacity_kwh"] == 10.0
+    assert entry.options["battery_efficiency_percent"] == 85.0

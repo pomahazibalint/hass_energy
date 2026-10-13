@@ -11,7 +11,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 
 from . import SettlementEntry
-from .settings import schedule_from_options, terms_from_options
+from .settings import battery_from_options, schedule_from_options, terms_from_options
 
 
 async def async_get_config_entry_diagnostics(
@@ -83,7 +83,28 @@ async def async_get_config_entry_diagnostics(
             }
         )
 
+    outlook = coordinator.outlook
+    battery = battery_from_options(entry.options)
+
     return {
+        "outlook": {
+            "days_remaining": outlook.days_remaining,
+            "days_from_last_year": outlook.days_from_last_year,
+            "billed_kwh": outlook.bill.billed_kwh,
+            "gross_total": outlook.bill.gross_total,
+            "allowance_runs_out": (
+                outlook.runs_out_on.isoformat() if outlook.runs_out_on else None
+            ),
+        }
+        if outlook
+        else None,
+        "battery": {
+            "capacity_kwh": battery.capacity_kwh,
+            "round_trip_efficiency": battery.round_trip_efficiency,
+            "saving": coordinator.battery_saving,
+        }
+        if battery
+        else None,
         # Entity ids are the user's own naming, so they are reported as
         # configured rather than redacted into uselessness.
         "sources": {

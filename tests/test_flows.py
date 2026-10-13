@@ -20,7 +20,9 @@ from hass_energy.billing import (
     calculate,
     device_share,
     marginal,
+    settle,
     solar_value,
+    with_battery,
 )
 
 BUDAPEST = ZoneInfo("Europe/Budapest")
@@ -36,7 +38,7 @@ def flows(*hours: dict[str, float]) -> list[Flows]:
     return [Flows(START + timedelta(hours=i), **hour) for i, hour in enumerate(hours)]
 
 
-def settle(hours: list[Hour], terms: TariffTerms = TERMS) -> tuple[Bill, list[HourCost]]:
+def allocated(hours: list[Hour], terms: TariffTerms = TERMS) -> tuple[Bill, list[HourCost]]:
     return allocate(PERIOD, hours, SCHEDULE, terms, standing_charge_months=12, tz=BUDAPEST)
 
 
@@ -103,8 +105,8 @@ def test_the_hourly_values_sum_to_the_bill_without_the_panels() -> None:
         {"imported_kwh": 0.0, "exported_kwh": 3.0, "produced_kwh": 5.0},
         {"imported_kwh": 4.0},
     )
-    bill, costs = settle(list(series))
-    bill_without, costs_without = settle([hour.without_solar() for hour in series])
+    bill, costs = allocated(list(series))
+    bill_without, costs_without = allocated([hour.without_solar() for hour in series])
     hourly = solar_value(costs, costs_without)
 
     assert sum(hourly) == pytest.approx(bill_without.net_position - bill.net_position, abs=1)
@@ -121,8 +123,8 @@ def test_the_panels_are_worth_what_they_saved_under_each_mode() -> None:
     series = flows({"imported_kwh": 10.0, "exported_kwh": 4.0, "produced_kwh": 7.0})
     for mode in SettlementMode:
         terms = TariffTerms(mode=mode)
-        bill, costs = settle(list(series), terms)
-        bill_without, costs_without = settle([hour.without_solar() for hour in series], terms)
+        bill, costs = allocated(list(series), terms)
+        bill_without, costs_without = allocated([hour.without_solar() for hour in series], terms)
         direct = calculate(
             PERIOD, MeterReadings(13.0, 0.0), SCHEDULE, terms, standing_charge_months=12
         )
@@ -134,14 +136,14 @@ def test_the_panels_are_worth_what_they_saved_under_each_mode() -> None:
 
 def test_no_panels_are_worth_nothing() -> None:
     series = flows({"imported_kwh": 2.0}, {"imported_kwh": 3.0, "exported_kwh": 0.0})
-    _, costs = settle(list(series))
-    _, costs_without = settle([hour.without_solar() for hour in series])
+    _, costs = allocated(list(series))
+    _, costs_without = allocated([hour.without_solar() for hour in series])
 
     assert solar_value(costs, costs_without) == [0.0, 0.0]
 
 
 def test_the_two_allocations_must_cover_the_same_hours() -> None:
-    _, costs = settle(list(flows({"imported_kwh": 2.0})))
+    _, costs = allocated(list(flows({"imported_kwh": 2.0})))
 
     with pytest.raises(ValueError):
         solar_value(costs, [])
@@ -256,3 +258,53 @@ def test_a_device_cannot_have_used_more_than_the_house() -> None:
 def test_a_device_share_cannot_be_negative() -> None:
     with pytest.raises(ValueError):
         device_share(-1.0, 4.0)
+
+
+def test_a_battery_catches_export_and_serves_later_import() -> None:
+    series = flows({"exported_kwh": 3.0}, {"imported_kwh": 2.0}, {"imported_kwh": 2.0})
+
+    simulated = with_battery(series, capacity_kwh=10.0, round_trip_efficiency=1.0)
+
+    assert [(h.imported_kwh, h.exported_kwh) for h in simulated] == pytest.approx(
+        [(0.0, 0.0), (0.0, 0.0), (1.0, 0.0)]
+    )
+
+
+def test_a_battery_holds_no_more_than_its_capacity() -> None:
+    series = flows({"exported_kwh": 5.0}, {"imported_kwh": 5.0})
+
+    simulated = with_battery(series, capacity_kwh=2.0, round_trip_efficiency=1.0)
+
+    assert simulated[0].exported_kwh == pytest.approx(3.0)
+    assert simulated[1].imported_kwh == pytest.approx(3.0)
+
+
+def test_a_battery_loses_its_round_trip_inefficiency_on_the_way_out() -> None:
+    series = flows({"exported_kwh": 2.0}, {"imported_kwh": 5.0})
+
+    simulated = with_battery(series, capacity_kwh=10.0, round_trip_efficiency=0.5)
+
+    assert simulated[1].imported_kwh == pytest.approx(4.0)
+
+
+def test_a_battery_is_worth_something_under_gross_settlement() -> None:
+    series = flows({"exported_kwh": 3.0, "produced_kwh": 3.0}, {"imported_kwh": 3.0})
+    gross = TariffTerms(mode=SettlementMode.BRUTTO)
+    real = settle(PERIOD, series, SCHEDULE, gross, standing_charge_months=12, tz=BUDAPEST)
+    with_one = settle(
+        PERIOD,
+        with_battery(series, 10.0, 1.0),
+        SCHEDULE,
+        gross,
+        standing_charge_months=12,
+        tz=BUDAPEST,
+    )
+
+    assert real.net_position - with_one.net_position == pytest.approx(3 * 30 * VAT - 3 * 5.0, abs=1)
+
+
+def test_a_battery_needs_a_sane_capacity_and_efficiency() -> None:
+    with pytest.raises(ValueError):
+        with_battery([], capacity_kwh=-1.0, round_trip_efficiency=0.9)
+    with pytest.raises(ValueError):
+        with_battery([], capacity_kwh=1.0, round_trip_efficiency=0.0)

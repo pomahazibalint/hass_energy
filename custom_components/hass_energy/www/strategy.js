@@ -62,14 +62,16 @@ function entitiesOf(entry, registry) {
 }
 
 // The statistics the entry wrote, by kind; the ids are the recorder's, so
-// the strategy never reproduces the backend's naming.
+// the strategy never reproduces the backend's naming. An entry id is an
+// upper-case ULID and a statistic id is its slug, which is lower case.
 function statisticsOf(entry, statistics) {
+  const slug = entry.entry_id.toLowerCase();
   const own = statistics.filter(
-    (one) => one.source === DOMAIN && one.statistic_id.startsWith(`${DOMAIN}:`) && one.statistic_id.includes(entry.entry_id)
+    (one) => one.source === DOMAIN && one.statistic_id.startsWith(`${DOMAIN}:`) && one.statistic_id.includes(slug)
   );
   const ofKind = (kind) => own.find((one) => one.statistic_id.endsWith(`_${kind}`))?.statistic_id;
   const devices = own
-    .filter((one) => one.statistic_id.includes(`${entry.entry_id}_device_`) && one.statistic_id.endsWith("_cost"))
+    .filter((one) => one.statistic_id.includes(`${slug}_device_`) && one.statistic_id.endsWith("_cost"))
     .map((one) => one.statistic_id);
   return { ofKind, devices };
 }
@@ -142,7 +144,7 @@ function viewsFor(entry, registry, statistics, prefs, hass, index, several) {
     path: `settlement${suffix}`,
     icon: "mdi:receipt-text-outline",
     type: "sections",
-    max_columns: 3,
+    max_columns: 4,
     sections: [
       section([
         {
@@ -150,7 +152,7 @@ function viewsFor(entry, registry, statistics, prefs, hass, index, several) {
           title: entry.title,
           entities: Object.fromEntries(Object.entries(byLine).filter(([line]) => BILL_LINES.includes(line))),
         },
-      ]),
+      ], 2),
       section([
         ...entities(t(hass, "outlook"), [
           "projected_total_payable",
@@ -166,15 +168,39 @@ function viewsFor(entry, registry, statistics, prefs, hass, index, several) {
           "consumption_cost",
           "battery_saving",
         ]),
-      ]),
+      ], 2),
     ],
   };
 
   // The native cards share the energy date picker; so do the statistics
   // graphs over the integration's own figures, through its date selection.
+  // Two stacked columns rather than a section per card: sections in a row
+  // align to the tallest, and a stack has no rows to leave gaps between.
   const gauges = [
     ...(named.solar ? [{ type: "energy-solar-consumed-gauge", grid_options: { columns: 6 } }] : []),
     ...(named.exported.length ? [{ type: "energy-grid-neutrality-gauge", grid_options: { columns: 6 } }] : []),
+  ];
+  const flows = [
+    { type: "energy-date-selection" },
+    { type: "energy-usage-graph" },
+    ...(named.solar ? [{ type: "energy-solar-graph" }] : []),
+    ...graph(t(hass, "house_consumption"), ["house_consumption", "self_consumed_solar"]),
+    ...graph(t(hass, "cost_and_value"), ["consumption_cost", "solar_value"]),
+    { type: "energy-sources-table" },
+  ];
+  const shares = [
+    ...(named.devices ? [] : [{ type: "energy-distribution" }]),
+    ...gauges,
+    ...(named.devices ? [{ type: "energy-devices-graph" }, { type: "energy-devices-detail-graph" }] : []),
+    {
+      type: "custom:hass-energy-devices-card",
+      title: t(hass, "devices_period"),
+      devices,
+      entities: Object.fromEntries(
+        Object.entries(byLine).filter(([line]) => ["consumption_cost", "house_consumption"].includes(line))
+      ),
+    },
+    ...(own.devices.length ? [statisticsGraph(t(hass, "devices_range"), own.devices)] : []),
   ];
   const usage = {
     title: `${prefix}${t(hass, "view_usage")}`,
@@ -183,39 +209,15 @@ function viewsFor(entry, registry, statistics, prefs, hass, index, several) {
     type: "sections",
     max_columns: 4,
     sections: [
-      section([{ type: "energy-date-selection" }], 4),
-      section([{ type: "energy-usage-graph" }], 2),
-      section([named.devices ? { type: "energy-sankey" } : { type: "energy-distribution" }], 2),
-      ...(named.solar ? [section([{ type: "energy-solar-graph" }], 2)] : []),
-      ...(gauges.length ? [section(gauges, 2)] : []),
-      section([{ type: "energy-sources-table" }], 2),
-      ...graph(t(hass, "house_consumption"), ["house_consumption", "self_consumed_solar"]).map((card) => section([card], 2)),
-      ...graph(t(hass, "cost_and_value"), ["consumption_cost", "solar_value"]).map((card) => section([card], 2)),
-      ...(named.devices
-        ? [
-            section([{ type: "energy-devices-graph" }], 2),
-            section([{ type: "energy-devices-detail-graph" }], 2),
-          ]
-        : []),
-      section(
-        [
-          {
-            type: "custom:hass-energy-devices-card",
-            title: t(hass, "devices_period"),
-            devices,
-            entities: Object.fromEntries(
-              Object.entries(byLine).filter(([line]) => ["consumption_cost", "house_consumption"].includes(line))
-            ),
-          },
-        ],
-        2
-      ),
-      ...(own.devices.length ? [section([statisticsGraph(t(hass, "devices_range"), own.devices)], 2)] : []),
+      section(flows, 2),
+      section(shares, 2),
+      // The sankey wants the whole width; it turns vertical when it has less.
+      ...(named.devices ? [section([{ type: "energy-sankey", grid_options: { columns: "full" } }], 4)] : []),
     ],
   };
 
   const monthly = (title, statistic) =>
-    statistic ? [section([{ type: "custom:hass-energy-history-card", title, statistic, years: 3 }], 2)] : [];
+    statistic ? [{ type: "custom:hass-energy-history-card", title, statistic, years: 3 }] : [];
   const settled = ["settlement_cost", "imported_energy"].map((kind) => own.ofKind(kind)).filter(Boolean);
   const history = {
     title: `${prefix}${t(hass, "view_history")}`,
@@ -224,13 +226,12 @@ function viewsFor(entry, registry, statistics, prefs, hass, index, several) {
     type: "sections",
     max_columns: 4,
     sections: [
-      ...monthly(t(hass, "grid_import"), named.imported[0]),
-      ...monthly(t(hass, "grid_export"), named.exported[0]),
-      ...monthly(t(hass, "house_by_month"), own.ofKind("house_consumption")),
-      ...(settled.length
-        ? [
-            section(
-              [
+      section([...monthly(t(hass, "grid_import"), named.imported[0]), ...monthly(t(hass, "house_by_month"), own.ofKind("house_consumption"))], 2),
+      section(
+        [
+          ...monthly(t(hass, "grid_export"), named.exported[0]),
+          ...(settled.length
+            ? [
                 {
                   type: "statistics-graph",
                   title: t(hass, "past_settlements"),
@@ -240,11 +241,11 @@ function viewsFor(entry, registry, statistics, prefs, hass, index, several) {
                   period: "month",
                   days_to_show: 1500,
                 },
-              ],
-              2
-            ),
-          ]
-        : []),
+              ]
+            : []),
+        ],
+        2
+      ),
     ],
   };
 

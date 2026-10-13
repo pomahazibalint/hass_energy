@@ -10,9 +10,11 @@
 import { monthNames, t } from "./strings.js";
 
 const COLORS = ["var(--primary-color)", "var(--accent-color, #ff9800)", "var(--secondary-text-color)", "var(--disabled-color, #bdbdbd)"];
-const WIDTH = 600;
-const HEIGHT = 220;
-const PAD = { top: 12, right: 8, bottom: 28, left: 44 };
+// A viewBox close to the card's real width keeps the text legible: the
+// browser scales the drawing to the card, text included.
+const WIDTH = 440;
+const HEIGHT = 200;
+const PAD = { top: 12, right: 8, bottom: 26, left: 40 };
 
 const STYLE = `
   :host { display: block; }
@@ -20,7 +22,7 @@ const STYLE = `
   h1 { font-size: var(--ha-card-header-font-size, 24px); font-weight: normal;
        margin: 0; padding: 16px 0 8px; color: var(--ha-card-header-color, var(--primary-text-color)); }
   svg { width: 100%; height: auto; display: block; touch-action: none; }
-  text { fill: var(--secondary-text-color); font-size: 11px; }
+  text { fill: var(--secondary-text-color); font-size: 10px; }
   .grid { stroke: var(--divider-color); stroke-width: 1; }
   .hover { fill: var(--primary-text-color); opacity: 0; }
   .hover.on { opacity: 0.06; }

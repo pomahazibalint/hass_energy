@@ -289,6 +289,13 @@ fills a screen across and stacks on a phone: Settlement, the invoice beside
 the outlook; Usage, the native energy cards for the selected range beside
 the integration's own figures and the devices; and History, the long view.
 The five below are the questions; the three are how they are laid out.
+Two things about the sections grid that the first layouts got wrong: a
+section spanning n columns is a grid of 12 n card columns in which a card
+takes 12 unless told otherwise, so a stack of wide cards has to ask for the
+section's full width; and sections in a row align to the tallest, so a
+section per card leaves gaps, while a stack of cards leaves none. The
+History card draws itself at the card's real width, because a scaled
+viewBox scales its text with it.
 
 Bill: the settlement as an invoice. Grid cost, what solar avoided, surplus
 compensation, standing charge, VAT, total payable, net position, allowance

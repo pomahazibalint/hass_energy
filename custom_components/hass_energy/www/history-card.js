@@ -10,11 +10,11 @@
 import { monthNames, t } from "./strings.js";
 
 const COLORS = ["var(--primary-color)", "var(--accent-color, #ff9800)", "var(--secondary-text-color)", "var(--disabled-color, #bdbdbd)"];
-// A viewBox close to the card's real width keeps the text legible: the
-// browser scales the drawing to the card, text included.
-const WIDTH = 440;
-const HEIGHT = 200;
-const PAD = { top: 12, right: 8, bottom: 26, left: 40 };
+// The drawing is made at the card's real width, so its text is the size
+// it says it is whatever the card's width; the browser scales a viewBox
+// otherwise, text included.
+const PAD = { top: 12, right: 8, bottom: 26, left: 44 };
+const INSET = 32;
 
 const STYLE = `
   :host { display: block; }
@@ -22,7 +22,7 @@ const STYLE = `
   h1 { font-size: var(--ha-card-header-font-size, 24px); font-weight: normal;
        margin: 0; padding: 16px 0 8px; color: var(--ha-card-header-color, var(--primary-text-color)); }
   svg { width: 100%; height: auto; display: block; touch-action: none; }
-  text { fill: var(--secondary-text-color); font-size: 10px; }
+  text { fill: var(--secondary-text-color); font-size: 11px; }
   .grid { stroke: var(--divider-color); stroke-width: 1; }
   .hover { fill: var(--primary-text-color); opacity: 0; }
   .hover.on { opacity: 0.06; }
@@ -59,6 +59,23 @@ class HassEnergyHistoryCard extends HTMLElement {
     }
   }
 
+  connectedCallback() {
+    if (this._observer) return;
+    this._observer = new ResizeObserver(() => {
+      const width = this.clientWidth;
+      if (width && Math.abs(width - (this._width || 0)) > 24 && this._data) {
+        this._width = width;
+        this._render(this._data, null);
+      }
+    });
+    this._observer.observe(this);
+  }
+
+  disconnectedCallback() {
+    this._observer?.disconnect();
+    this._observer = null;
+  }
+
   getCardSize() {
     return 4;
   }
@@ -82,6 +99,7 @@ class HassEnergyHistoryCard extends HTMLElement {
       if (!byYear.has(year)) byYear.set(year, new Array(12).fill(null));
       byYear.get(year)[start.getMonth()] = Math.max(row.change || 0, 0);
     }
+    this._data = byYear;
     this._render(byYear, null);
   }
 
@@ -101,6 +119,8 @@ class HassEnergyHistoryCard extends HTMLElement {
     const months = monthNames(hass);
     const numbers = new Intl.NumberFormat(hass.locale?.language || "en", { maximumFractionDigits: 1 });
     const top = Math.max(1, ...years.flatMap((year) => byYear.get(year).map((v) => v || 0)));
+    const WIDTH = Math.max(280, (this._width || this.clientWidth || 472) - INSET);
+    const HEIGHT = Math.round(Math.min(280, Math.max(180, WIDTH * 0.4)));
     const plotWidth = WIDTH - PAD.left - PAD.right;
     const plotHeight = HEIGHT - PAD.top - PAD.bottom;
     const group = plotWidth / 12;
@@ -132,11 +152,11 @@ class HassEnergyHistoryCard extends HTMLElement {
       `${ticks.join("")}${bars.join("")}${labels.join("")}</svg>` +
       `<div class="tip"></div>` +
       `<div class="legend">${legend}<span>${escape(t(hass, "per_month", { unit }))}</span></div></ha-card>`;
-    this._hover(byYear, years, months, unit, numbers, group);
+    this._hover(byYear, years, months, unit, numbers, group, WIDTH);
   }
 
   // The native charts show every series for the hovered month; so does this.
-  _hover(byYear, years, months, unit, numbers, group) {
+  _hover(byYear, years, months, unit, numbers, group, WIDTH) {
     const root = this.shadowRoot;
     const svg = root.querySelector("svg");
     const card = root.querySelector("ha-card");

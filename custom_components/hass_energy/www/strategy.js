@@ -111,7 +111,11 @@ const BILL_LINES = [
   "period_days",
 ];
 
+// A section spanning n columns is a grid of 12 n card columns, and a card
+// takes 12 unless told otherwise, so a stack of full-width cards has to
+// say so; "full" is the section's whole width whatever it spans.
 const section = (cards, span) => (span ? { type: "grid", column_span: span, cards } : { type: "grid", cards });
+const full = (card) => ({ ...card, grid_options: { columns: "full", ...(card.grid_options || {}) } });
 const statisticsGraph = (title, entities, extra = {}) => ({
   type: "statistics-graph",
   title,
@@ -143,8 +147,9 @@ function viewsFor(entry, registry, statistics, prefs, hass, index, several) {
     title: `${prefix}${t(hass, "view_settlement")}`,
     path: `settlement${suffix}`,
     icon: "mdi:receipt-text-outline",
+    // Three single columns: a card each, nothing to leave a gap.
     type: "sections",
-    max_columns: 4,
+    max_columns: 3,
     sections: [
       section([
         {
@@ -152,23 +157,21 @@ function viewsFor(entry, registry, statistics, prefs, hass, index, several) {
           title: entry.title,
           entities: Object.fromEntries(Object.entries(byLine).filter(([line]) => BILL_LINES.includes(line))),
         },
-      ], 2),
-      section([
-        ...entities(t(hass, "outlook"), [
-          "projected_total_payable",
-          "projected_billed_energy",
-          "allowance_runs_out",
-          "allowance_remaining",
-          "period_days",
-        ]),
-        ...entities(t(hass, "solar_battery"), [
-          "solar_value",
-          "self_consumed_solar",
-          "house_consumption",
-          "consumption_cost",
-          "battery_saving",
-        ]),
-      ], 2),
+      ]),
+      ...entities(t(hass, "outlook"), [
+        "projected_total_payable",
+        "projected_billed_energy",
+        "allowance_runs_out",
+        "allowance_remaining",
+        "period_days",
+      ]).map((card) => section([card])),
+      ...entities(t(hass, "solar_battery"), [
+        "solar_value",
+        "self_consumed_solar",
+        "house_consumption",
+        "consumption_cost",
+        "battery_saving",
+      ]).map((card) => section([card])),
     ],
   };
 
@@ -177,8 +180,8 @@ function viewsFor(entry, registry, statistics, prefs, hass, index, several) {
   // Two stacked columns rather than a section per card: sections in a row
   // align to the tallest, and a stack has no rows to leave gaps between.
   const gauges = [
-    ...(named.solar ? [{ type: "energy-solar-consumed-gauge", grid_options: { columns: 6 } }] : []),
-    ...(named.exported.length ? [{ type: "energy-grid-neutrality-gauge", grid_options: { columns: 6 } }] : []),
+    ...(named.solar ? [{ type: "energy-solar-consumed-gauge", grid_options: { columns: 12 } }] : []),
+    ...(named.exported.length ? [{ type: "energy-grid-neutrality-gauge", grid_options: { columns: 12 } }] : []),
   ];
   const flows = [
     { type: "energy-date-selection" },
@@ -209,10 +212,10 @@ function viewsFor(entry, registry, statistics, prefs, hass, index, several) {
     type: "sections",
     max_columns: 4,
     sections: [
-      section(flows, 2),
-      section(shares, 2),
+      section(flows.map(full), 2),
+      section(shares.map((card) => (card.type.endsWith("-gauge") ? card : full(card))), 2),
       // The sankey wants the whole width; it turns vertical when it has less.
-      ...(named.devices ? [section([{ type: "energy-sankey", grid_options: { columns: "full" } }], 4)] : []),
+      ...(named.devices ? [section([full({ type: "energy-sankey" })], 4)] : []),
     ],
   };
 
@@ -226,7 +229,13 @@ function viewsFor(entry, registry, statistics, prefs, hass, index, several) {
     type: "sections",
     max_columns: 4,
     sections: [
-      section([...monthly(t(hass, "grid_import"), named.imported[0]), ...monthly(t(hass, "house_by_month"), own.ofKind("house_consumption"))], 2),
+      section(
+        [
+          ...monthly(t(hass, "grid_import"), named.imported[0]),
+          ...monthly(t(hass, "house_by_month"), own.ofKind("house_consumption")),
+        ].map(full),
+        2
+      ),
       section(
         [
           ...monthly(t(hass, "grid_export"), named.exported[0]),
@@ -243,7 +252,7 @@ function viewsFor(entry, registry, statistics, prefs, hass, index, several) {
                 },
               ]
             : []),
-        ],
+        ].map(full),
         2
       ),
     ],

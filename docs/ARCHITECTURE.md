@@ -366,6 +366,13 @@ against Home Assistant's own schemas with `hass --script check_config`. Note
 that command exits 0 even when it rejects a configuration, so the workflow
 inspects its output rather than its status.
 
+A disagreement finding is judged against the recorder's own rows, and
+`scripts/inspect_hours.py` prints them for the sources the energy dashboard
+names, hour by hour around a given hour, over the websocket API with a
+long-lived access token: the change, sum and state of each source, the hours
+a source has no row for, and the balance that went negative. It reads the
+same rows the integration reads, so it shows what the integration saw.
+
 `check_config` compiles templates but never renders one, and a template that
 compiles can still fail on the first state it reads. `scripts/render_check.py`
 executes every generated template against a Home Assistant instance holding

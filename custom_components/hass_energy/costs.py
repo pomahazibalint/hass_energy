@@ -98,32 +98,52 @@ def _is_device(entry_id: str, stat_id: str) -> bool:
     )
 
 
-def _metadata(entry_id: str, title: str, series: Series) -> StatisticMetaData:
+#: What each kind is called where a statistic is picked or drawn. The entry's
+#: title is not part of it: the sensors carry it as their device, and a
+#: legend that repeats it on every series says nothing.
+NAMES: Final = {
+    GRID_COST: "Grid cost",
+    EXPORT_COMPENSATION: "Export compensation",
+    HOUSE_CONSUMPTION: "House consumption",
+    SELF_CONSUMED_SOLAR: "Self-consumed solar",
+    SOLAR_VALUE: "Solar value",
+    CONSUMPTION_COST: "Consumption cost",
+}
+
+
+def statistic_name(series: Series) -> str:
+    return series.name or NAMES.get(series.kind, series.kind.replace("_", " ").capitalize())
+
+
+def _metadata(entry_id: str, series: Series) -> StatisticMetaData:
     return StatisticMetaData(
         mean_type=StatisticMeanType.NONE,
         has_sum=True,
         unit_class=series.unit_class,
-        name=f"{title} {series.name or series.kind.replace('_', ' ')}",
+        name=statistic_name(series),
         source=DOMAIN,
         statistic_id=statistic_id(entry_id, series.kind),
         unit_of_measurement=series.unit,
     )
 
 
-async def _published(hass: HomeAssistant, entry_id: str) -> set[str]:
-    """Every statistic the recorder holds under this entry's name."""
+async def _published(hass: HomeAssistant, entry_id: str) -> dict[str, str | None]:
+    """Every statistic the recorder holds under this entry's name, with its name."""
 
     known = await get_instance(hass).async_add_executor_job(
         partial(get_metadata, hass, statistic_source=DOMAIN)
     )
     prefix = statistic_id(entry_id, "")
-    return {stat_id for stat_id in known if stat_id.startswith(prefix)}
+    return {
+        stat_id: metadata["name"]
+        for stat_id, (_, metadata) in known.items()
+        if stat_id.startswith(prefix)
+    }
 
 
 async def async_publish(
     hass: HomeAssistant,
     entry_id: str,
-    title: str,
     period_start: datetime,
     series: Sequence[Series],
 ) -> None:
@@ -141,7 +161,8 @@ async def async_publish(
 
     ids = {one.kind: statistic_id(entry_id, one.kind) for one in series}
     instance = get_instance(hass)
-    known = await _published(hass, entry_id)
+    named = await _published(hass, entry_id)
+    known = set(named)
     absent = [ids[one.kind] for one in series if one.rows is None and ids[one.kind] in known]
     absent += [
         stat_id
@@ -189,9 +210,15 @@ async def async_publish(
                 or abs(have[1] - running) > TOLERANCE
             ):
                 changed.append(StatisticData(start=start, state=value, sum=running))
+        metadata = _metadata(entry_id, one)
         if changed:
-            async_add_external_statistics(hass, _metadata(entry_id, title, one), changed)
+            async_add_external_statistics(hass, metadata, changed)
             _LOGGER.debug("Wrote %d hours of %s for %s", len(changed), one.kind, entry_id)
+        elif stat_id in named and named[stat_id] != metadata["name"]:
+            # A statistic renamed since it was written: the import updates the
+            # metadata before it looks at rows, so none are needed.
+            async_add_external_statistics(hass, metadata, [])
+            _LOGGER.debug("Renamed %s to %s", stat_id, metadata["name"])
 
 
 async def async_remove(hass: HomeAssistant, entry_id: str) -> None:

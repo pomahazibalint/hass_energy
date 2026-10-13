@@ -106,11 +106,11 @@ async def _import_invoice(hass: HomeAssistant, call: ServiceCall) -> None:
             datetime.combine(end, time.min).replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
         ).replace(minute=0, second=0, microsecond=0)
 
-        for kind, unit, value in (
-            ("imported_energy", UnitOfEnergy.KILO_WATT_HOUR, imported),
-            ("exported_energy", UnitOfEnergy.KILO_WATT_HOUR, exported),
-            ("settlement_cost", currency, float(bill.gross_total)),
-            ("surplus_value", currency, float(bill.surplus_net)),
+        for kind, name, unit, value in (
+            ("imported_energy", "Settled import", UnitOfEnergy.KILO_WATT_HOUR, imported),
+            ("exported_energy", "Settled export", UnitOfEnergy.KILO_WATT_HOUR, exported),
+            ("settlement_cost", "Settlement cost", currency, float(bill.gross_total)),
+            ("surplus_value", "Settled surplus value", currency, float(bill.surplus_net)),
         ):
             stat_id = statistic_id(coordinator.entry.entry_id, kind)
             running = await _last_sum(hass, stat_id)
@@ -118,7 +118,7 @@ async def _import_invoice(hass: HomeAssistant, call: ServiceCall) -> None:
                 mean_type=StatisticMeanType.NONE,
                 has_sum=True,
                 unit_class=None,
-                name=f"{coordinator.entry.title} {kind.replace('_', ' ')}",
+                name=name,
                 source=DOMAIN,
                 statistic_id=stat_id,
                 unit_of_measurement=unit,

@@ -284,12 +284,15 @@ and leaves it alone.
 
 The strategy arranged five views at first, one per question, each a single
 column of cards, then three in the sections grid. Use showed what it was
-becoming: the native energy dashboard with two tabs added. So the layout
-is now a copy of the native energy view's own strategy rather than an
-approximation of it. Energy is that view, with the integration's house
-consumption beside the native cards; Costs is the invoice and the outlook
-in the sidebar beside the costs for the selected range and the devices;
-History is the long view. The native shape is a sidebar of small cards
+becoming: the native energy dashboard with two tabs added. So that is what
+it is. The native dashboard's own tabs, Summary, Electricity, Gas, Water
+and Now, are views that delegate to Home Assistant's view strategies,
+chosen as the native dashboard chooses them from the preferences and
+titled with its own words; nothing of them is copied. After them come the
+integration's two per metering point: Costs, the invoice and the outlook
+in the sidebar beside the costs for the selected range, the house's
+consumption and the devices; and History, the long view. The two are
+built in the native view's own shape, a sidebar of small cards
 shown when the view has two or more columns and the same cards inline when
 it has one, a main section three columns wide in which a card asks for all
 36 card columns, and the date picker as a floating footer card that takes

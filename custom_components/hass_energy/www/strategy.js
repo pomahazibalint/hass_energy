@@ -7,9 +7,11 @@
 // static generate(); the entry in window.customStrategies is what makes the
 // new-dashboard dialog offer it.
 //
-// Three views per metering point: Energy, a copy of Home Assistant's own
-// energy view; Costs, the invoice and the outlook beside the costs for the
-// selected range and the devices; and History, the long view by month.
+// The native energy dashboard's own tabs, built by Home Assistant's view
+// strategies exactly as its own dashboard builds them, and then two of
+// ours per metering point: Costs, the invoice and the outlook beside the
+// costs for the selected range and the devices; and History, the long
+// view by month.
 
 import { t } from "./strings.js";
 
@@ -30,7 +32,7 @@ class HassEnergyDashboardStrategy {
       hass.callWS({ type: "energy/get_prefs" }).catch(() => null),
     ]);
     const loaded = entries.filter((entry) => entry.state === "loaded");
-    const views = [];
+    const views = nativeTabs(hass, prefs);
     loaded.forEach((entry, index) => {
       views.push(...viewsFor(entry, registry, statistics, prefs, hass, index, loaded.length > 1));
     });
@@ -98,13 +100,40 @@ function preferencesOf(prefs) {
   return { imported, exported, solar, battery, devices };
 }
 
-// The shape of Home Assistant's own energy view, copied rather than
-// approximated: a sidebar of small cards shown when the view has two or
-// more columns, the same cards inline when it has one, a main section
-// three columns wide in which a card asks for all 36 card columns, and
-// the date picker as a floating footer card that takes no room from the
-// cards. Costs and History get the same skeleton, so the dashboard reads
-// as the native one with two tabs added.
+// The native dashboard's tabs, each a view Home Assistant's own strategy
+// builds, chosen as the native dashboard chooses them: electricity when
+// there is a grid, solar, battery or devices; gas and water when named;
+// Now when any source reports power; and the summary when there is power
+// or more than one kind of energy. Titles are Home Assistant's own.
+function nativeTabs(hass, prefs) {
+  const sources = prefs?.energy_sources || [];
+  const kinds = new Set(sources.map((source) => source.type));
+  const energy = ["grid", "solar", "battery"].some((kind) => kinds.has(kind));
+  const devices = (prefs?.device_consumption || []).length > 0;
+  const gas = kinds.has("gas");
+  const water = kinds.has("water") || (prefs?.device_consumption_water || []).length > 0;
+  const power =
+    sources.some((source) => source.stat_rate || source.power_config || (source.flow_from || []).some((f) => f.stat_rate)) ||
+    (prefs?.device_consumption || []).some((device) => device.stat_rate);
+  const tab = (path, type) => ({
+    path,
+    strategy: { type },
+    title: hass.localize(`ui.panel.energy.title.${path}`) || path,
+  });
+  const tabs = [];
+  if (energy || devices) tabs.push(tab("electricity", "energy"));
+  if (gas) tabs.push(tab("gas", "gas"));
+  if (water) tabs.push(tab("water", "water"));
+  if (power) tabs.push(tab("now", "power"));
+  if (power || [energy, gas, water].filter(Boolean).length > 1) tabs.unshift(tab("overview", "energy-overview"));
+  return tabs;
+}
+
+// The shape of Home Assistant's own energy view, for the tabs that are
+// ours: a sidebar of small cards shown when the view has two or more
+// columns, the same cards inline when it has one, a main section three
+// columns wide in which a card asks for all 36 card columns, and the date
+// picker as a floating footer card that takes no room from the cards.
 const WIDE = { condition: "view_columns", min: 2 };
 const NARROW = { condition: "view_columns", max: 1 };
 const main = (card) => ({ ...card, grid_options: { columns: 36 } });
@@ -129,7 +158,6 @@ function nativeView({ title, path, icon, aside, cards, dated }) {
   return view;
 }
 
-const native = (hass, key) => hass.localize(`ui.panel.energy.cards.${key}`);
 const statisticsGraph = (title, entities, extra = {}) => ({
   type: "statistics-graph",
   title,
@@ -168,45 +196,6 @@ function viewsFor(entry, registry, statistics, prefs, hass, index, several) {
     const ids = kinds.map((kind) => own.ofKind(kind)).filter(Boolean);
     return ids.length ? [statisticsGraph(title, ids)] : [];
   };
-  const grid = named.imported.length > 0;
-  const both = grid && named.exported.length > 0;
-
-  const gauges = [
-    ...(both ? [{ type: "energy-grid-neutrality-gauge" }] : []),
-    ...(named.solar ? [{ type: "energy-solar-consumed-gauge" }, { type: "energy-self-sufficiency-gauge" }] : []),
-  ];
-  const energy = nativeView({
-    title: `${prefix}${t(hass, "view_energy")}`,
-    path: `energy${suffix}`,
-    icon: "mdi:lightning-bolt",
-    dated: true,
-    aside: [
-      { title: native(hass, "energy_distribution_title"), type: "energy-distribution" },
-      ...(both ? [{ type: "energy-grid-balance" }] : []),
-      ...(gauges.length ? [{ type: "grid", columns: gauges.length === 1 ? 1 : 2, cards: gauges }] : []),
-    ],
-    cards: [
-      { type: "energy-compare" },
-      ...(grid || named.battery
-        ? [{ title: native(hass, "energy_usage_graph_title"), type: "energy-usage-graph" }]
-        : []),
-      ...(named.solar ? [{ title: native(hass, "energy_solar_graph_title"), type: "energy-solar-graph" }] : []),
-      ...graph(t(hass, "house_consumption"), ["house_consumption", "self_consumed_solar"]),
-      {
-        title: native(hass, "energy_sources_table_title"),
-        type: "energy-sources-table",
-        types: ["grid", "solar", "battery"],
-      },
-      ...(named.devices
-        ? [
-            { title: native(hass, "energy_devices_detail_graph_title"), type: "energy-devices-detail-graph" },
-            { title: native(hass, "energy_devices_graph_title"), type: "energy-devices-graph" },
-            { title: native(hass, "energy_sankey_title"), type: "energy-sankey" },
-          ]
-        : []),
-    ],
-  });
-
   const costs = nativeView({
     title: `${prefix}${t(hass, "view_costs")}`,
     path: `costs${suffix}`,
@@ -235,6 +224,7 @@ function viewsFor(entry, registry, statistics, prefs, hass, index, several) {
     ],
     cards: [
       ...graph(t(hass, "cost_and_value"), ["consumption_cost", "solar_value"]),
+      ...graph(t(hass, "house_consumption"), ["house_consumption", "self_consumed_solar"]),
       {
         type: "custom:hass-energy-devices-card",
         title: t(hass, "devices_period"),
@@ -276,7 +266,7 @@ function viewsFor(entry, registry, statistics, prefs, hass, index, several) {
     ],
   });
 
-  return [energy, costs, history];
+  return [costs, history];
 }
 
 customElements.define("ll-strategy-dashboard-hass-energy", HassEnergyDashboardStrategy);

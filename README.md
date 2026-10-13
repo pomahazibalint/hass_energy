@@ -77,13 +77,14 @@ there and reported through the same repair.
 The integration brings its own dashboard. Create it from **Settings >
 Dashboards > Add dashboard**, where **Energy settlement** is listed among
 the custom dashboards; it builds itself from your metering points and needs
-no configuration. It is the native energy dashboard with two tabs added.
-**Energy** is a copy of Home Assistant's own energy view, with the
-integration's house consumption beside the native cards. **Costs** is the
-invoice and the outlook beside the costs for the selected range: the
-consumption cost and solar value by day, a table of energy and cost per
-device over the settlement period with the rest of the house, and the
-device costs by day. **History** is each grid meter and the house by
+no configuration. It is the native energy dashboard with two tabs added:
+Home Assistant's own Summary, Electricity, Gas, Water and Now tabs, as
+your sources call for them, built by Home Assistant itself, and then
+**Costs**, the invoice and the outlook beside the costs for the selected
+range: the consumption cost and solar value by day, the house's
+consumption, a table of energy and cost per device over the settlement
+period with the rest of the house, and the device costs by day; and
+**History**, each grid meter and the house by
 calendar month, this year over the two before it, and past settlements.
 The date picker floats at the bottom, as in the native dashboard. Tap any line of the
 invoice or any device to see how its figure came to be: so many kWh at

@@ -19,6 +19,7 @@ from custom_components.hass_energy.costs import (
 )
 from custom_components.hass_energy.settings import price_entry
 from homeassistant.components.recorder.statistics import (
+    async_add_external_statistics,
     get_metadata,
     statistics_during_period,
 )
@@ -113,7 +114,7 @@ async def test_the_statistics_speak_the_dashboards_currency(
     assert meta["unit_of_measurement"] == hass.config.currency
     assert meta["has_sum"] is True
     assert meta["source"] == DOMAIN
-    assert meta["name"] == "Test settlement grid cost"
+    assert meta["name"] == "Grid cost"
 
 
 async def test_a_backdated_price_rewrites_the_hours_it_covers(
@@ -227,3 +228,44 @@ async def test_hours_nobody_watched_are_not_published(
     assert cost[0]["start"] == DAY_START.timestamp()
     assert cost[0]["state"] == pytest.approx(10 * 40 * VAT)
     assert all(row["state"] == 0 for row in cost[1:])
+
+
+async def test_statistics_are_named_without_the_entry_title(
+    entry: MockConfigEntry, hass: HomeAssistant
+) -> None:
+    """A legend that repeats the entry's title on every series says nothing."""
+
+    await record(hass, IMPORT_ENTITY, DAY_START, [1.0])
+    await refresh(hass, entry)
+    await async_wait_recording_done(hass)
+
+    stat_id = statistic_id(entry.entry_id, GRID_COST)
+    metadata = await get_instance(hass).async_add_executor_job(
+        partial(get_metadata, hass, statistic_ids={stat_id})
+    )
+    assert metadata[stat_id][1]["name"] == "Grid cost"
+
+
+async def test_a_statistic_written_under_an_old_name_is_renamed_in_place(
+    entry: MockConfigEntry, hass: HomeAssistant
+) -> None:
+    await record(hass, IMPORT_ENTITY, DAY_START, [1.0])
+    await refresh(hass, entry)
+    await async_wait_recording_done(hass)
+    stat_id = statistic_id(entry.entry_id, GRID_COST)
+    old = await get_instance(hass).async_add_executor_job(
+        partial(get_metadata, hass, statistic_ids={stat_id})
+    )
+    renamed = {**old[stat_id][1], "name": "Test settlement grid cost"}
+    async_add_external_statistics(hass, renamed, [])
+    await async_wait_recording_done(hass)
+
+    # Nothing about the hours changed, so only the name has to.
+    await refresh(hass, entry)
+    await async_wait_recording_done(hass)
+
+    metadata = await get_instance(hass).async_add_executor_job(
+        partial(get_metadata, hass, statistic_ids={stat_id})
+    )
+    assert metadata[stat_id][1]["name"] == "Grid cost"
+

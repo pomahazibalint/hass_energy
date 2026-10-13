@@ -10,7 +10,6 @@ const STRINGS = {
     listing_name: "Energy settlement",
     listing_description:
       "The settlement as an invoice, what the house used, and where the period is heading.",
-    view_energy: "Energy",
     view_costs: "Costs",
     view_history: "History",
     no_entry:
@@ -76,7 +75,6 @@ const STRINGS = {
     listing_name: "Energia elszámolás",
     listing_description:
       "Az elszámolás számlaként, amit a ház fogyasztott, és merre tart az időszak.",
-    view_energy: "Energia",
     view_costs: "Költségek",
     view_history: "Előzmények",
     no_entry:

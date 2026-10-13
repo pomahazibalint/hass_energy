@@ -437,11 +437,7 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         # two are separate readers of the same bill.
         try:
             await async_publish(
-                self.hass,
-                self.entry.entry_id,
-                self.entry.title,
-                self._period_start(),
-                self._series(observed),
+                self.hass, self.entry.entry_id, self._period_start(), self._series(observed)
             )
         except Exception:
             _LOGGER.exception("Could not publish the hourly statistics for %s", self.entry.title)

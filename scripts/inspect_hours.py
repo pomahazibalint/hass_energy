@@ -106,7 +106,9 @@ async def main() -> None:
     parser.add_argument("--sources", nargs="*", help="Statistic ids instead of the dashboard's")
     args = parser.parse_args()
 
-    token = args.token_file.read_text().strip() if args.token_file else os.environ.get("HASS_TOKEN", "")
+    token = os.environ.get("HASS_TOKEN", "")
+    if args.token_file:
+        token = args.token_file.read_text().strip()
     if not token:
         sys.exit("No token: pass --token-file or set HASS_TOKEN.")
     middle = datetime.fromisoformat(args.around)
@@ -133,7 +135,7 @@ async def main() -> None:
             types=["change", "sum", "state"],
         )
 
-    print(f"Hours {start:%Y-%m-%d %H:%M} to {end:%Y-%m-%d %H:%M} ({start.tzname()}), figures as recorded")
+    print(f"Hours {start:%Y-%m-%d %H:%M} to {end:%Y-%m-%d %H:%M} ({start.tzname()}), as recorded")
     for statistic in ids:
         meta = metadata.get(statistic, {})
         role = roles.get(statistic, "")
@@ -151,7 +153,7 @@ async def main() -> None:
             cursor += timedelta(hours=1)
 
     print()
-    print("Balance per hour: import + solar + discharge - export - charge; negative is the disagreement.")
+    print("Balance per hour: import + solar + discharge - export - charge; negative disagrees.")
     cursor = start.replace(minute=0, second=0, microsecond=0)
     signs = {"import": 1, "solar": 1, "discharge": 1, "export": -1, "charge": -1}
     while cursor < end:
@@ -159,7 +161,8 @@ async def main() -> None:
         for statistic, role in roles.items():
             by_start = {row["start"]: row for row in rows.get(statistic, [])}
             row = by_start.get(cursor.timestamp() * 1000) or by_start.get(cursor.timestamp())
-            total += signs.get(role, 0) * max((row or {}).get("change") or 0.0, 0.0)
+            change = (row or {}).get("change") or 0.0
+            total += signs.get(role, 0) * max(change, 0.0)
         flag = "   <- energy left that never entered" if total < -1e-6 else ""
         print(f"  {cursor:%Y-%m-%d %H:%M}  {total:8.3f}{flag}")
         cursor += timedelta(hours=1)

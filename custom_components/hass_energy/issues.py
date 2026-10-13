@@ -150,10 +150,10 @@ def sources_disagree(
 def device_bursts(hass: HomeAssistant, entry_id: str, bursts: dict[str, tuple[int, float]]) -> None:
     """A device meter claimed more in an hour than the whole house used.
 
-    The meter reports in bursts, a session's energy in the hour it ended.
-    Its cost for such an hour is capped at the house's, so the burst is
-    costed as if the house had used it, and the hours it really ran in are
-    the rest of the house. Worth knowing, not worth alarm.
+    A session's energy booked in the hour it ended, or a reading that stood
+    still through a connection gap and caught up in one step. Its cost for
+    such an hour is capped at the house's, and the hours it really ran in
+    are the rest of the house. Worth knowing, not worth alarm.
     """
 
     _set(

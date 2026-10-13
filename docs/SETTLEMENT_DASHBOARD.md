@@ -1,17 +1,19 @@
 # Settlement dashboard
 
-Status, 13 October 2026: the first three releases below, house consumption
-and solar value, consumption cost and devices, and projections, are
-implemented on `main` and not yet released. The dashboard is not started.
-Things the implementation settled that the plan had left open are recorded
-where they belong: the house's figures begin only where the grid record and
-every named household source exist, an hour that carries the seeded
-remainder is left out of every statistic, a device's figures begin at its
-own first hour without gating the house's, the house's consumption cost is a
-statistic and a sensor of its own, the allowance's exhaustion date is when
-it is gone for good, and the battery charges before it discharges within an
-hour; see "Sources", "Consumption cost and devices", "Projections by season",
-"Battery what-if" and "Edge cases".
+Status, 13 October 2026: all four releases below are implemented on `main`
+and not yet released. What remains of the plan is the Devices and History
+cards, which the fourth release deferred to the one after it. Things the
+implementation settled that the plan had left open are recorded where they
+belong: the house's figures begin only where the grid record and every named
+household source exist, an hour that carries the seeded remainder is left
+out of every statistic, a device's figures begin at its own first hour
+without gating the house's, the house's consumption cost is a statistic and
+a sensor of its own, the allowance's exhaustion date is when it is gone for
+good, the battery charges before it discharges within an hour, and a
+strategy is a custom element with a listing in `window.customStrategies`
+rather than a registration there; see "Sources", "Consumption cost and
+devices", "Projections by season", "Battery what-if", "The dashboard" and
+"Edge cases".
 
 A plan to give the integration the figures Home Assistant's energy dashboard
 cannot produce, and a dashboard of its own that shows them beside the parts of
@@ -247,13 +249,24 @@ window, and need nothing new from the backend beyond what the cards ask for.
 A dashboard strategy is a JavaScript module that builds the dashboard's
 configuration in the browser when it is opened, from the live registries and
 the energy preferences; Home Assistant's own energy and map dashboards are
-strategies. Since Home Assistant 2026.5 a strategy can register itself in
-`window.customStrategies`, after which it is offered in the new-dashboard
-dialog under community dashboards, with a suggested title and icon from the
-strategy's `getCreateSuggestions`. The user creates the dashboard from that
-dialog, in one step, and owns it like any other: the integration creates no
-dashboard and touches no Lovelace internals. That is the minimum Home
-Assistant version in `hacs.json`.
+strategies. A strategy is a custom element named
+`ll-strategy-dashboard-<name>` with a static `generate`, and since Home
+Assistant 2026.5 a listing pushed to `window.customStrategies` makes the
+new-dashboard dialog offer it under custom dashboards, with a suggested
+title and icon from the strategy's `getCreateSuggestions`. The user creates
+the dashboard from that dialog, in one step, and owns it like any other: the
+integration creates no dashboard and touches no Lovelace internals. That is
+the minimum Home Assistant version in `hacs.json`. The strategy declares
+`noEditor`, since it takes no configuration.
+
+The strategy reads three things over the websocket: the integration's
+config entries, the entity registry, from which it takes each entry's
+entities by the line of the settlement each is, and the recorder's list of
+statistic ids, from which it takes the statistics the entry wrote. Reading
+the statistics rather than spelling their ids means the strategy never
+reproduces the backend's naming. A view's cards include only the entities
+and statistics the entry has, so a household without panels sees no solar
+lines and no empty graphs.
 
 The module is served from the integration's own directory through the
 HTTP component's static paths and registered with the frontend's extra
@@ -360,8 +373,12 @@ projection module, the allowance left after each hour on the allocation's
 hourly figures, a one-shot settlement for callers that want only the end,
 and the battery beside the other counterfactuals on the hour's flows.
 
-The dashboard. Next. The strategy module, its registration, the Bill card and
-the Usage and Outlook views. The Devices and History cards follow in the
+The dashboard. Done. The strategy module, its registration, the Bill card
+and the Usage and Outlook views. The module is served from the
+integration's `www` directory under a URL carrying the version, the
+`frontend` and `http` components became dependencies, and the workflow
+parses each module with node, since that is the only check a plain module
+without a build step can have. The Devices and History cards follow in the
 release after, once the first card has shown what a plain module costs to
 maintain.
 
@@ -381,7 +398,7 @@ per-bucket results. The sources table does not use it. Checked against the
 frontend's development branch on 12 October 2026.
 
 Whether an integration should create the dashboard. No. Home Assistant 2026.5
-added `window.customStrategies`, so a registered strategy is offered in the
+added `window.customStrategies`, so a listed strategy is offered in the
 new-dashboard dialog and the user creates it there. The dashboards
 collection the map dashboard is created through is not needed and not used.
 Dwains Dashboard, the best-known integration-shipped dashboard, predates

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from functools import partial
 
 from homeassistant.components.recorder.statistics import (
@@ -60,6 +60,12 @@ class Observed:
     #: where it has no row. A device says nothing about the house's flows,
     #: so it neither gates them nor is gated by them.
     devices: dict[str, list[float]] = field(default_factory=dict)
+    #: The window read, every source read, and the start of the latest hour
+    #: each source has a row for in it.
+    start: datetime = field(default_factory=lambda: datetime.min.replace(tzinfo=UTC))
+    end: datetime = field(default_factory=lambda: datetime.min.replace(tzinfo=UTC))
+    sources: list[str] = field(default_factory=list)
+    last_of: dict[str, datetime] = field(default_factory=dict)
 
     @property
     def imported_kwh(self) -> float:
@@ -136,6 +142,11 @@ async def async_observe(
         for source, per_source in changes.items()
         if per_source
     }
+    last_of = {
+        source: dt_util.utc_from_timestamp(max(per_source))
+        for source, per_source in changes.items()
+        if per_source
+    }
 
     grid = [source for role in GRID_ROLES for source in roles.get(role, ())]
     first = min((first_of[source] for source in grid if source in first_of), default=None)
@@ -166,6 +177,10 @@ async def async_observe(
             device: [changes[device].get(hour.start.timestamp(), 0.0) for hour in hours]
             for device in devices
         },
+        start=start,
+        end=end,
+        sources=[*sources, *devices],
+        last_of=last_of,
     )
 
 

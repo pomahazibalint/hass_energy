@@ -10,8 +10,9 @@ the native settings, and never asked for again.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
+from typing import Any
 
 from homeassistant.components.energy.data import async_get_manager
 from homeassistant.const import ATTR_FRIENDLY_NAME
@@ -98,7 +99,15 @@ async def async_sources(hass: HomeAssistant, import_entity: str) -> Sources:
     discharge: list[str] = []
     for source in manager.data["energy_sources"]:
         if source["type"] == "grid":
-            grid.extend(flow["stat_energy_from"] for flow in source["flow_from"])
+            # Home Assistant 2026.10 gave the grid source one import and one
+            # export statistic; before that it carried lists of flows, and a
+            # stored document is migrated only when it is next saved. Read
+            # as a plain mapping, since only one shape is the typed one.
+            raw: Mapping[str, Any] = source
+            if "flow_from" in raw:
+                grid.extend(flow["stat_energy_from"] for flow in raw["flow_from"])
+            elif raw.get("stat_energy_from"):
+                grid.append(str(raw["stat_energy_from"]))
         elif source["type"] == "solar":
             production.append(source["stat_energy_from"])
         elif source["type"] == "battery":

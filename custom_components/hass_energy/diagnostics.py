@@ -113,7 +113,10 @@ async def async_get_config_entry_diagnostics(
             "production": list(coordinator.sources.production),
             "battery_charge": list(coordinator.sources.charge),
             "battery_discharge": list(coordinator.sources.discharge),
-            "missing": coordinator.missing_sources(),
+            "stale": {
+                source: last.isoformat() if last else None
+                for source, last in coordinator.stale_sources().items()
+            },
         },
         "disagreement": {
             "hours": coordinator.disagreement.hours,

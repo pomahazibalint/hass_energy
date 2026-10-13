@@ -165,17 +165,38 @@ async def test_an_overdue_settlement_is_raised(
     assert coordinator(entry).data.period.end > TODAY
 
 
-async def test_a_source_that_stops_reporting_is_raised(
+async def test_a_source_that_stops_being_recorded_is_raised(
     entry: MockConfigEntry, hass: HomeAssistant
 ) -> None:
-    hass.states.async_set(IMPORT_ENTITY, "unavailable")
+    """Judged by the statistics: the import meter's last row is three days old."""
+
+    start = TODAY - timedelta(days=5)
+    await record(hass, IMPORT_ENTITY, local_midnight(start), [1.0] * 48)
+    await record(hass, EXPORT_ENTITY, local_midnight(start), [1.0] * 24 * 5)
+    await coordinator(entry).async_close_settlement(start)
     await hass.async_block_till_done()
-    await refresh(hass, entry)
 
     registry = ir.async_get(hass)
-    issue = registry.async_get_issue(DOMAIN, f"source_missing_{entry.entry_id}")
+    issue = registry.async_get_issue(DOMAIN, f"source_stale_{entry.entry_id}")
     assert issue is not None
     assert IMPORT_ENTITY in issue.translation_placeholders["entities"]  # type: ignore[index]
+    assert EXPORT_ENTITY not in issue.translation_placeholders["entities"]  # type: ignore[index]
+
+
+async def test_a_sensor_unavailable_overnight_is_not_a_fault(
+    entry: MockConfigEntry, hass: HomeAssistant
+) -> None:
+    """An inverter's sensors go unavailable at dusk; its rows by day are what count."""
+
+    start = TODAY - timedelta(days=5)
+    await record(hass, IMPORT_ENTITY, local_midnight(start), [1.0] * 24 * 5 + [1.0] * 10)
+    hass.states.async_set(IMPORT_ENTITY, "unavailable")
+    await coordinator(entry).async_close_settlement(start)
+    await hass.async_block_till_done()
+
+    registry = ir.async_get(hass)
+    assert registry.async_get_issue(DOMAIN, f"source_stale_{entry.entry_id}") is None
+    assert registry.async_get_issue(DOMAIN, f"source_missing_{entry.entry_id}") is None
 
 
 async def test_a_source_the_recorder_never_compiled_is_raised(

@@ -316,6 +316,20 @@ async def test_the_panels_belong_to_the_metering_point_the_dashboard_names(
     assert states(await rows(hass, second, HOUSE_CONSUMPTION))[:1] == [1.0]
 
 
+async def test_a_grid_source_stored_in_the_old_format_still_names_the_meter(
+    entry: MockConfigEntry, hass: HomeAssistant
+) -> None:
+    """Before 2026.10 the grid source carried lists of flows; a stored one still may."""
+
+    await name_sources(hass, grid=IMPORT_ENTITY, solar=[PRODUCTION_ENTITY], legacy_grid=True)
+    await record(hass, IMPORT_ENTITY, DAY_START, [0.0])
+    await record(hass, PRODUCTION_ENTITY, DAY_START, [3.0])
+    await refresh(hass, entry)
+
+    assert coordinator(entry).sources.production == (PRODUCTION_ENTITY,)
+    assert state_of(hass, "self_consumed_solar") == "3.0"
+
+
 async def test_closing_the_settlement_keeps_the_houses_figures(
     entry: MockConfigEntry, hass: HomeAssistant
 ) -> None:

@@ -5,7 +5,12 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-import voluptuous as vol
+# Home Assistant replaced voluptuous with probatio in 2026.10; the two share
+# the API this uses, and the versions this supports span the change.
+try:
+    import probatio as vol
+except ImportError:  # pragma: no cover - Home Assistant before 2026.10
+    import voluptuous as vol  # type: ignore[no-redef]
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_NAME
 from homeassistant.helpers import selector

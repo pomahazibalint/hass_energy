@@ -214,12 +214,14 @@ can supply them, and without it a fresh install has no history at all.
 
 Problems are repair issues rather than binary sensors: a price schedule that no
 longer reaches the start of the period, a settlement running far past a year
-with no reading recorded, a source that has stopped reporting, a source the
-recorder has no statistics for. The checks run on every refresh, which follows
-the recorder's hourly compile, so they cannot describe a state the integration
-has already left. A schedule that cannot price the period makes the entities
-unavailable rather than reporting zero — unvaluable is not the same number as
-nothing.
+with no reading recorded, a source the recorder has had nothing from for
+days, a source the recorder has no statistics for. The checks run on every
+refresh, which follows the recorder's hourly compile, so they cannot describe
+a state the integration has already left. A schedule that cannot price the
+period makes the entities unavailable rather than reporting zero — unvaluable
+is not the same number as nothing. A source is judged by its statistics and
+never by its live state: an inverter's sensors are unavailable every night,
+and the settlement reads the recorder, which has the inverter's day.
 
 The entities lag the meter by up to an hour, the lag the dashboard beside them
 already has. The figures they answer for — how much allowance is left, what the
@@ -326,6 +328,12 @@ in the workflow job that installs it. They put hours into the recorder directly
 and run on a frozen clock. The engine's own tests need nothing and run
 everywhere. The frontend package is installed there too, because the
 integration depends on the frontend component for the dashboard it serves.
+That job must run on the Python the newest Home Assistant needs and nothing
+older: pinning an older Python there silently pins the last Home Assistant
+that supported it, which is how a change to the energy preferences' shape
+went unnoticed for months while the build stayed green. The household's
+other sources are read inside a guard for the same reason; a document the
+integration does not understand costs the house's figures, not the bill.
 
 ## Releasing
 

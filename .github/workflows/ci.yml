@@ -119,7 +119,7 @@ jobs:
       - name: Home Assistant configuration check
         run: |
           set -o pipefail
-          uvx --python 3.13 --from homeassistant \
+          uvx --python 3.14 --from homeassistant \
             hass --script check_config -c ha-config | tee check.log
           if grep -q 'Incorrect config' check.log; then
             echo '::error::Home Assistant rejected the generated packages'
@@ -130,7 +130,7 @@ jobs:
       # that compiles can still fail on the first state it reads.
       - name: Render every generated template
         run: >
-          uv run --python 3.13 --with homeassistant --no-project
+          uv run --python 3.14 --with homeassistant --no-project
           python scripts/render_check.py examples/packages
 
       # The integration needs Home Assistant to import at all, so its tests and
@@ -139,12 +139,12 @@ jobs:
       # Assistant installs it at runtime rather than declaring it.
       - name: Integration tests
         run: >
-          uv run --python 3.13 --with homeassistant --with home-assistant-frontend
+          uv run --python 3.14 --with homeassistant --with home-assistant-frontend
           --with pytest-homeassistant-custom-component --no-project
           python -m pytest tests/integration -q -o asyncio_mode=auto -o addopts=
 
       - name: Integration types
         run: >
-          uv run --python 3.13 --with homeassistant --with mypy --no-project
+          uv run --python 3.14 --with homeassistant --with mypy --no-project
           python -m mypy --strict --python-version 3.13
           --explicit-package-bases custom_components

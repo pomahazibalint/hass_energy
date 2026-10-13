@@ -14,7 +14,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from homeassistant.components.frontend import add_extra_js_url
-from homeassistant.components.http import StaticPathConfig
+
+# Defined in the http component's package before 2026.10 and only re-exported
+# from it since, which the type check does not accept; the import works on both.
+from homeassistant.components.http import StaticPathConfig  # type: ignore[attr-defined]
 from homeassistant.core import HomeAssistant
 from homeassistant.loader import async_get_integration
 from homeassistant.util.hass_dict import HassKey

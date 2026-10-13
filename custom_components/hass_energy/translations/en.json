@@ -227,9 +227,9 @@
       "title": "Settlement period has run {days} days",
       "description": "A settlement period this long suggests the meter has been read without the integration being told. Call the Close settlement period action with the reading date to start the next one."
     },
-    "source_missing": {
-      "title": "Energy source sensors are not reporting",
-      "description": "{entities} are unavailable or not numeric. Nothing is being recorded from them, and the settlement will understate what the house used."
+    "source_stale": {
+      "title": "Energy sources have stopped being recorded",
+      "description": "The recorder has had nothing from {entities} for more than {days} days. The settlement is read from long-term statistics, so nothing from these sources counts until they are recorded again. A sensor that is unavailable for a night, like an inverter's, is not this."
     },
     "source_unrecorded": {
       "title": "Energy source sensors have no statistics",

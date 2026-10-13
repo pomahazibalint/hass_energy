@@ -23,11 +23,7 @@ from datetime import date, datetime, timedelta, tzinfo
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    EVENT_RECORDER_HOURLY_STATISTICS_GENERATED,
-    STATE_UNAVAILABLE,
-    STATE_UNKNOWN,
-)
+from homeassistant.const import EVENT_RECORDER_HOURLY_STATISTICS_GENERATED
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -87,6 +83,11 @@ from .settings import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+#: A source the recorder has had no row from for this long has stopped being
+#: recorded. An inverter is off every night and its sensors unavailable with
+#: it, which is not a fault; two days is longer than any night.
+STALE_AFTER = timedelta(days=2)
 
 #: Assumed length of a settlement period until a meter reading ends it. The two
 #: reference invoices ran 359 and 368 days, so this is a placeholder for the
@@ -340,12 +341,19 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         covered = self.prices_cover_period()
         issues.price_coverage(self.hass, self.entry.entry_id, covered, self.state.start)
         issues.settlement_overdue(self.hass, self.entry.entry_id, self.days_elapsed())
-        issues.source_missing(self.hass, self.entry.entry_id, self.missing_sources())
 
-        self.sources = await async_sources(self.hass, self.import_entity)
+        # The household's other sources are the dashboard's, and a shape of
+        # that document this does not know must not take the bill down with
+        # it: the bill needs only the grid meters.
+        try:
+            self.sources = await async_sources(self.hass, self.import_entity)
+        except Exception:
+            _LOGGER.exception("Could not read the energy dashboard's sources; using none")
+            self.sources = Sources()
         observed = await self._observe()
         self.observed = observed
         issues.source_unrecorded(self.hass, self.entry.entry_id, observed.unrecorded)
+        issues.source_stale(self.hass, self.entry.entry_id, self.stale_sources(), STALE_AFTER.days)
         self.device_excess = self._device_excess(observed)
         self.disagreement = Disagreement.over(self._losses(observed))
         issues.sources_disagree(
@@ -643,16 +651,6 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             )
         return hours, {hours[i].start for i in targets}
 
-    def _read(self, entity_id: str) -> float | None:
-        state = self.hass.states.get(entity_id)
-        if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-            return None
-        try:
-            return float(state.state)
-        except ValueError:
-            _LOGGER.debug("%s is not numeric: %s", entity_id, state.state)
-            return None
-
     def house_since(self) -> datetime | None:
         """The first hour the house's figures can be built on, if any.
 
@@ -758,13 +756,28 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         day = today or dt_util.now().date()
         return max(self.state.start + timedelta(days=NOMINAL_PERIOD_DAYS), day + timedelta(days=1))
 
-    def missing_sources(self) -> list[str]:
-        """Configured meters that are not currently reporting a number."""
+    def stale_sources(self) -> dict[str, datetime | None]:
+        """Recorded sources the recorder has had nothing from for too long.
 
-        sources = [self.import_entity]
-        if self.export_entity:
-            sources.append(self.export_entity)
-        return [entity for entity in sources if self._read(entity) is None]
+        By the statistics, not the live state: the settlement reads the
+        recorder, and a sensor that is unavailable overnight has rows by day.
+        Each is mapped to the start of its last hour in the window, None for
+        none at all. Nothing is said until the window read is long enough
+        to tell.
+        """
+
+        observed = self.observed
+        if observed is None or observed.end - observed.start < STALE_AFTER:
+            return {}
+        return {
+            source: observed.last_of.get(source)
+            for source in observed.sources
+            if source not in observed.unrecorded
+            and (
+                source not in observed.last_of
+                or observed.end - observed.last_of[source] > STALE_AFTER
+            )
+        }
 
     def prices_cover_period(self) -> bool:
         """Whether the schedule reaches back to the start of the period."""

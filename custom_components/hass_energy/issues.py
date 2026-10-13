@@ -6,7 +6,7 @@ rather than as binary sensors nobody has put on a dashboard yet.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
@@ -76,24 +76,32 @@ def settlement_overdue(hass: HomeAssistant, entry_id: str, days: int) -> None:
     )
 
 
-def source_missing(hass: HomeAssistant, entry_id: str, missing: list[str]) -> None:
-    """A source that is not reporting stops the accounting silently."""
+def source_stale(
+    hass: HomeAssistant, entry_id: str, stale: dict[str, datetime | None], days: int
+) -> None:
+    """A source the recorder has had nothing from for days stops the accounting silently.
 
+    Judged by the statistics rather than the live state, because an inverter
+    is unavailable every night and the settlement reads the recorder, not
+    the sensor. The live-state check this replaces is withdrawn with it.
+    """
+
+    _set(hass, entry_id, "source_missing", active=False)
     _set(
         hass,
         entry_id,
-        "source_missing",
-        active=bool(missing),
-        placeholders={"entities": ", ".join(missing)},
+        "source_stale",
+        active=bool(stale),
+        placeholders={
+            "entities": ", ".join(
+                f"{source} (last {dt_util.as_local(last).isoformat(timespec='minutes')})"
+                if last
+                else source
+                for source, last in stale.items()
+            ),
+            "days": str(days),
+        },
     )
-
-
-def stale_since(last_seen: date | None, today: date, days: int) -> bool:
-    """Whether a source has gone quiet for longer than it should."""
-
-    if last_seen is None:
-        return False
-    return today - last_seen > timedelta(days=days)
 
 
 def source_unrecorded(hass: HomeAssistant, entry_id: str, unrecorded: list[str]) -> None:

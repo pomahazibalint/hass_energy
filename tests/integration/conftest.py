@@ -149,6 +149,7 @@ async def name_sources(
     battery: tuple[str, str] | None = None,
     grid: str | None = None,
     devices: Sequence[dict[str, Any]] = (),
+    legacy_grid: bool = False,
 ) -> None:
     """Name the household's sources as the energy dashboard's settings would.
 
@@ -156,14 +157,16 @@ async def name_sources(
     ``grid`` the import meter the dashboard's grid source names, and
     ``devices`` the device consumption rows as the preferences hold them.
     Saving the preferences is what the dashboard does, so the integration
-    hears about it the same way.
+    hears about it the same way. ``legacy_grid`` writes the grid source as
+    Home Assistant did before 2026.10, with lists of flows, which a stored
+    document keeps until it is next saved.
     """
 
     sources: list[Any] = [
         {"type": "solar", "stat_energy_from": source, "config_entry_solar_forecast": None}
         for source in solar
     ]
-    if grid:
+    if grid and legacy_grid:
         sources.insert(
             0,
             {
@@ -177,6 +180,22 @@ async def name_sources(
                     }
                 ],
                 "flow_to": [],
+                "cost_adjustment_day": 0,
+            },
+        )
+    elif grid:
+        sources.insert(
+            0,
+            {
+                "type": "grid",
+                "stat_energy_from": grid,
+                "stat_energy_to": None,
+                "stat_cost": None,
+                "entity_energy_price": None,
+                "number_energy_price": None,
+                "stat_compensation": None,
+                "entity_energy_price_export": None,
+                "number_energy_price_export": None,
                 "cost_adjustment_day": 0,
             },
         )

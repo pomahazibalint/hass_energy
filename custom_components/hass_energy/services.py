@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 
-import voluptuous as vol
+# Home Assistant replaced voluptuous with probatio in 2026.10; the two share
+# the API this uses, and the versions this supports span the change.
+try:
+    import probatio as vol
+except ImportError:  # pragma: no cover - Home Assistant before 2026.10
+    import voluptuous as vol  # type: ignore[no-redef]
 from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
 from homeassistant.components.recorder.models.statistics import StatisticMeanType
 from homeassistant.components.recorder.statistics import (

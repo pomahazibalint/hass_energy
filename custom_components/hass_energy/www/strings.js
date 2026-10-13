@@ -10,8 +10,8 @@ const STRINGS = {
     listing_name: "Energy settlement",
     listing_description:
       "The settlement as an invoice, what the house used, and where the period is heading.",
-    view_settlement: "Settlement",
-    view_usage: "Usage",
+    view_energy: "Energy",
+    view_costs: "Costs",
     view_history: "History",
     no_entry:
       "No Energy Settlement metering point is set up. Add one under Settings > Devices & services, and this dashboard fills itself.",
@@ -76,8 +76,8 @@ const STRINGS = {
     listing_name: "Energia elszámolás",
     listing_description:
       "Az elszámolás számlaként, amit a ház fogyasztott, és merre tart az időszak.",
-    view_settlement: "Elszámolás",
-    view_usage: "Fogyasztás",
+    view_energy: "Energia",
+    view_costs: "Költségek",
     view_history: "Előzmények",
     no_entry:
       "Nincs beállított Energia elszámolás mérési pont. Adj hozzá egyet a Beállítások > Eszközök és szolgáltatások alatt, és ez az irányítópult magától feltöltődik.",

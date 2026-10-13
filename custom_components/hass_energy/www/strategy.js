@@ -7,10 +7,9 @@
 // static generate(); the entry in window.customStrategies is what makes the
 // new-dashboard dialog offer it.
 //
-// Three views per metering point, in the sections grid so a wide screen is
-// used across: the settlement, with the invoice beside the outlook; usage,
-// the native energy cards for the selected range beside the integration's
-// own figures and the devices; and history, the long view by month.
+// Three views per metering point: Energy, a copy of Home Assistant's own
+// energy view; Costs, the invoice and the outlook beside the costs for the
+// selected range and the devices; and History, the long view by month.
 
 import { t } from "./strings.js";
 
@@ -99,6 +98,49 @@ function preferencesOf(prefs) {
   return { imported, exported, solar, battery, devices };
 }
 
+// The shape of Home Assistant's own energy view, copied rather than
+// approximated: a sidebar of small cards shown when the view has two or
+// more columns, the same cards inline when it has one, a main section
+// three columns wide in which a card asks for all 36 card columns, and
+// the date picker as a floating footer card that takes no room from the
+// cards. Costs and History get the same skeleton, so the dashboard reads
+// as the native one with two tabs added.
+const WIDE = { condition: "view_columns", min: 2 };
+const NARROW = { condition: "view_columns", max: 1 };
+const main = (card) => ({ ...card, grid_options: { columns: 36 } });
+
+function nativeView({ title, path, icon, aside, cards, dated }) {
+  const view = { title, path, icon, type: "sections", sections: [] };
+  if (aside.length) {
+    view.sidebar = { sections: [{ cards: aside }], visibility: [WIDE] };
+    for (const card of aside) {
+      // A grid of gauges in the sidebar is the gauges side by side inline.
+      const inline =
+        card.type === "grid" ? card.cards.map((one) => ({ ...one, grid_options: { columns: 6 } })) : [card];
+      view.sections.push({ type: "grid", column_span: 1, visibility: [NARROW], cards: inline });
+    }
+  }
+  view.sections.push({ type: "grid", column_span: 3, cards: cards.map(main) });
+  if (dated) {
+    view.footer = {
+      card: { type: "energy-date-selection", opening_direction: "right", vertical_opening_direction: "up" },
+    };
+  }
+  return view;
+}
+
+const native = (hass, key) => hass.localize(`ui.panel.energy.cards.${key}`);
+const statisticsGraph = (title, entities, extra = {}) => ({
+  type: "statistics-graph",
+  title,
+  entities,
+  stat_types: ["change"],
+  chart_type: "bar",
+  period: "day",
+  energy_date_selection: true,
+  ...extra,
+});
+
 const BILL_LINES = [
   "energy_cost",
   "solar_value",
@@ -110,22 +152,6 @@ const BILL_LINES = [
   "allowance_remaining",
   "period_days",
 ];
-
-// A section spanning n columns is a grid of 12 n card columns, and a card
-// takes 12 unless told otherwise, so a stack of full-width cards has to
-// say so; "full" is the section's whole width whatever it spans.
-const section = (cards, span) => (span ? { type: "grid", column_span: span, cards } : { type: "grid", cards });
-const full = (card) => ({ ...card, grid_options: { columns: "full", ...(card.grid_options || {}) } });
-const statisticsGraph = (title, entities, extra = {}) => ({
-  type: "statistics-graph",
-  title,
-  entities,
-  stat_types: ["change"],
-  chart_type: "bar",
-  period: "day",
-  energy_date_selection: true,
-  ...extra,
-});
 
 function viewsFor(entry, registry, statistics, prefs, hass, index, several) {
   const { byLine, devices } = entitiesOf(entry, registry);
@@ -142,123 +168,115 @@ function viewsFor(entry, registry, statistics, prefs, hass, index, several) {
     const ids = kinds.map((kind) => own.ofKind(kind)).filter(Boolean);
     return ids.length ? [statisticsGraph(title, ids)] : [];
   };
+  const grid = named.imported.length > 0;
+  const both = grid && named.exported.length > 0;
 
-  const settlement = {
-    title: `${prefix}${t(hass, "view_settlement")}`,
-    path: `settlement${suffix}`,
+  const gauges = [
+    ...(both ? [{ type: "energy-grid-neutrality-gauge" }] : []),
+    ...(named.solar ? [{ type: "energy-solar-consumed-gauge" }, { type: "energy-self-sufficiency-gauge" }] : []),
+  ];
+  const energy = nativeView({
+    title: `${prefix}${t(hass, "view_energy")}`,
+    path: `energy${suffix}`,
+    icon: "mdi:lightning-bolt",
+    dated: true,
+    aside: [
+      { title: native(hass, "energy_distribution_title"), type: "energy-distribution" },
+      ...(both ? [{ type: "energy-grid-balance" }] : []),
+      ...(gauges.length ? [{ type: "grid", columns: gauges.length === 1 ? 1 : 2, cards: gauges }] : []),
+    ],
+    cards: [
+      { type: "energy-compare" },
+      ...(grid || named.battery
+        ? [{ title: native(hass, "energy_usage_graph_title"), type: "energy-usage-graph" }]
+        : []),
+      ...(named.solar ? [{ title: native(hass, "energy_solar_graph_title"), type: "energy-solar-graph" }] : []),
+      ...graph(t(hass, "house_consumption"), ["house_consumption", "self_consumed_solar"]),
+      {
+        title: native(hass, "energy_sources_table_title"),
+        type: "energy-sources-table",
+        types: ["grid", "solar", "battery"],
+      },
+      ...(named.devices
+        ? [
+            { title: native(hass, "energy_devices_detail_graph_title"), type: "energy-devices-detail-graph" },
+            { title: native(hass, "energy_devices_graph_title"), type: "energy-devices-graph" },
+            { title: native(hass, "energy_sankey_title"), type: "energy-sankey" },
+          ]
+        : []),
+    ],
+  });
+
+  const costs = nativeView({
+    title: `${prefix}${t(hass, "view_costs")}`,
+    path: `costs${suffix}`,
     icon: "mdi:receipt-text-outline",
-    // Three single columns: a card each, nothing to leave a gap.
-    type: "sections",
-    max_columns: 3,
-    sections: [
-      section([
-        {
-          type: "custom:hass-energy-bill-card",
-          title: entry.title,
-          entities: Object.fromEntries(Object.entries(byLine).filter(([line]) => BILL_LINES.includes(line))),
-        },
-      ]),
+    dated: true,
+    aside: [
+      {
+        type: "custom:hass-energy-bill-card",
+        title: entry.title,
+        entities: Object.fromEntries(Object.entries(byLine).filter(([line]) => BILL_LINES.includes(line))),
+      },
       ...entities(t(hass, "outlook"), [
         "projected_total_payable",
         "projected_billed_energy",
         "allowance_runs_out",
         "allowance_remaining",
         "period_days",
-      ]).map((card) => section([card])),
+      ]),
       ...entities(t(hass, "solar_battery"), [
         "solar_value",
         "self_consumed_solar",
         "house_consumption",
         "consumption_cost",
         "battery_saving",
-      ]).map((card) => section([card])),
+      ]),
     ],
-  };
-
-  // The native cards share the energy date picker; so do the statistics
-  // graphs over the integration's own figures, through its date selection.
-  // Two stacked columns rather than a section per card: sections in a row
-  // align to the tallest, and a stack has no rows to leave gaps between.
-  const gauges = [
-    ...(named.solar ? [{ type: "energy-solar-consumed-gauge", grid_options: { columns: 12 } }] : []),
-    ...(named.exported.length ? [{ type: "energy-grid-neutrality-gauge", grid_options: { columns: 12 } }] : []),
-  ];
-  const flows = [
-    { type: "energy-date-selection" },
-    { type: "energy-usage-graph" },
-    ...(named.solar ? [{ type: "energy-solar-graph" }] : []),
-    ...graph(t(hass, "house_consumption"), ["house_consumption", "self_consumed_solar"]),
-    ...graph(t(hass, "cost_and_value"), ["consumption_cost", "solar_value"]),
-    { type: "energy-sources-table" },
-  ];
-  const shares = [
-    ...(named.devices ? [] : [{ type: "energy-distribution" }]),
-    ...gauges,
-    ...(named.devices ? [{ type: "energy-devices-graph" }, { type: "energy-devices-detail-graph" }] : []),
-    {
-      type: "custom:hass-energy-devices-card",
-      title: t(hass, "devices_period"),
-      devices,
-      entities: Object.fromEntries(
-        Object.entries(byLine).filter(([line]) => ["consumption_cost", "house_consumption"].includes(line))
-      ),
-    },
-    ...(own.devices.length ? [statisticsGraph(t(hass, "devices_range"), own.devices)] : []),
-  ];
-  const usage = {
-    title: `${prefix}${t(hass, "view_usage")}`,
-    path: `usage${suffix}`,
-    icon: "mdi:chart-bar",
-    type: "sections",
-    max_columns: 4,
-    sections: [
-      section(flows.map(full), 2),
-      section(shares.map((card) => (card.type.endsWith("-gauge") ? card : full(card))), 2),
-      // The sankey wants the whole width; it turns vertical when it has less.
-      ...(named.devices ? [section([full({ type: "energy-sankey" })], 4)] : []),
+    cards: [
+      ...graph(t(hass, "cost_and_value"), ["consumption_cost", "solar_value"]),
+      {
+        type: "custom:hass-energy-devices-card",
+        title: t(hass, "devices_period"),
+        devices,
+        entities: Object.fromEntries(
+          Object.entries(byLine).filter(([line]) => ["consumption_cost", "house_consumption"].includes(line))
+        ),
+      },
+      ...(own.devices.length ? [statisticsGraph(t(hass, "devices_range"), own.devices)] : []),
     ],
-  };
+  });
 
   const monthly = (title, statistic) =>
     statistic ? [{ type: "custom:hass-energy-history-card", title, statistic, years: 3 }] : [];
   const settled = ["settlement_cost", "imported_energy"].map((kind) => own.ofKind(kind)).filter(Boolean);
-  const history = {
+  const history = nativeView({
     title: `${prefix}${t(hass, "view_history")}`,
     path: `history${suffix}`,
     icon: "mdi:history",
-    type: "sections",
-    max_columns: 4,
-    sections: [
-      section(
-        [
-          ...monthly(t(hass, "grid_import"), named.imported[0]),
-          ...monthly(t(hass, "house_by_month"), own.ofKind("house_consumption")),
-        ].map(full),
-        2
-      ),
-      section(
-        [
-          ...monthly(t(hass, "grid_export"), named.exported[0]),
-          ...(settled.length
-            ? [
-                {
-                  type: "statistics-graph",
-                  title: t(hass, "past_settlements"),
-                  entities: settled,
-                  stat_types: ["change"],
-                  chart_type: "bar",
-                  period: "month",
-                  days_to_show: 1500,
-                },
-              ]
-            : []),
-        ].map(full),
-        2
-      ),
+    dated: false,
+    aside: [],
+    cards: [
+      ...monthly(t(hass, "grid_import"), named.imported[0]),
+      ...monthly(t(hass, "grid_export"), named.exported[0]),
+      ...monthly(t(hass, "house_by_month"), own.ofKind("house_consumption")),
+      ...(settled.length
+        ? [
+            {
+              type: "statistics-graph",
+              title: t(hass, "past_settlements"),
+              entities: settled,
+              stat_types: ["change"],
+              chart_type: "bar",
+              period: "month",
+              days_to_show: 1500,
+            },
+          ]
+        : []),
     ],
-  };
+  });
 
-  return [settlement, usage, history];
+  return [energy, costs, history];
 }
 
 customElements.define("ll-strategy-dashboard-hass-energy", HassEnergyDashboardStrategy);

@@ -262,7 +262,7 @@ new-dashboard dialog offer it under custom dashboards, with a suggested
 title and icon from the strategy's `getCreateSuggestions`. The user creates
 the dashboard from that dialog, in one step, and owns it like any other: the
 integration creates no dashboard and touches no Lovelace internals. That is
-the minimum Home Assistant version in `hacs.json`. The strategy declares
+the version the dashboard needs at least. The strategy declares
 `noEditor`, since it takes no configuration.
 
 The strategy reads three things over the websocket: the integration's
@@ -283,19 +283,24 @@ successor on its development branch, recognises a resource loaded that way
 and leaves it alone.
 
 The strategy arranged five views at first, one per question, each a single
-column of cards. Use showed that a wide screen was mostly empty and that
-the questions pair up, so it arranges three, in the sections grid, which
-fills a screen across and stacks on a phone: Settlement, the invoice beside
-the outlook; Usage, the native energy cards for the selected range beside
-the integration's own figures and the devices; and History, the long view.
-The five below are the questions; the three are how they are laid out.
-Two things about the sections grid that the first layouts got wrong: a
-section spanning n columns is a grid of 12 n card columns in which a card
-takes 12 unless told otherwise, so a stack of wide cards has to ask for the
-section's full width; and sections in a row align to the tallest, so a
-section per card leaves gaps, while a stack of cards leaves none. The
+column of cards, then three in the sections grid. Use showed what it was
+becoming: the native energy dashboard with two tabs added. So the layout
+is now a copy of the native energy view's own strategy rather than an
+approximation of it. Energy is that view, with the integration's house
+consumption beside the native cards; Costs is the invoice and the outlook
+in the sidebar beside the costs for the selected range and the devices;
+History is the long view. The native shape is a sidebar of small cards
+shown when the view has two or more columns and the same cards inline when
+it has one, a main section three columns wide in which a card asks for all
+36 card columns, and the date picker as a floating footer card that takes
+no room from the cards. The five below are the questions; the three views
+are how they are laid out. Two things about the sections grid that the
+first layouts got wrong: a section spanning n columns is a grid of 12 n
+card columns in which a card takes 12 unless told otherwise, and sections
+in a row align to the tallest, so a section per card leaves gaps. The
 History card draws itself at the card's real width, because a scaled
-viewBox scales its text with it.
+viewBox scales its text with it. The sidebar and footer of a view exist
+from Home Assistant 2026.10, which is the minimum version in `hacs.json`.
 
 Bill: the settlement as an invoice. Grid cost, what solar avoided, surplus
 compensation, standing charge, VAT, total payable, net position, allowance

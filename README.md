@@ -25,7 +25,7 @@ They share a settlement engine and can be used separately.
 
 ## Installing the integration
 
-Requires Home Assistant 2026.5 or newer.
+Requires Home Assistant 2026.10 or newer.
 
 Via HACS, as a custom repository: add this repository's URL with category
 **Integration**, download it, and restart Home Assistant. Or by hand, copy
@@ -77,14 +77,15 @@ there and reported through the same repair.
 The integration brings its own dashboard. Create it from **Settings >
 Dashboards > Add dashboard**, where **Energy settlement** is listed among
 the custom dashboards; it builds itself from your metering points and needs
-no configuration. It has three views. **Settlement** is the invoice beside
-the outlook: the projections, and the solar and battery figures. **Usage**
-is the native energy cards for the selected range, the usage graph, the
-distribution or sankey, the solar graph, the gauges, the sources table and
-the device graphs, beside the integration's own figures and a table of
-energy and cost per device over the settlement period with the rest of the
-house. **History** is each grid meter and the house by calendar month, this
-year over the two before it, and past settlements. Tap any line of the
+no configuration. It is the native energy dashboard with two tabs added.
+**Energy** is a copy of Home Assistant's own energy view, with the
+integration's house consumption beside the native cards. **Costs** is the
+invoice and the outlook beside the costs for the selected range: the
+consumption cost and solar value by day, a table of energy and cost per
+device over the settlement period with the rest of the house, and the
+device costs by day. **History** is each grid meter and the house by
+calendar month, this year over the two before it, and past settlements.
+The date picker floats at the bottom, as in the native dashboard. Tap any line of the
 invoice or any device to see how its figure came to be: so many kWh at
 which price, and what was added to what. The integration and the dashboard
 are in English and Hungarian, following your Home Assistant language.

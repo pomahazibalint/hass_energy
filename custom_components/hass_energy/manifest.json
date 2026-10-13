@@ -1,17 +1,17 @@
 {
   "domain": "hass_energy",
   "name": "Energy Settlement",
+  "after_dependencies": [
+    "energy"
+  ],
   "codeowners": [
     "@pomahazibalint"
   ],
   "config_flow": true,
   "dependencies": [
-    "http",
     "frontend",
+    "http",
     "recorder"
-  ],
-  "after_dependencies": [
-    "energy"
   ],
   "documentation": "https://github.com/pomahazibalint/hass_energy",
   "integration_type": "service",

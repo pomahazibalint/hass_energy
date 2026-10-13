@@ -11,6 +11,7 @@ from . import issues
 from .const import DOMAIN, RETIRED_OPTIONS, RETIRED_SENSORS
 from .coordinator import SettlementCoordinator
 from .costs import async_remove as remove_statistics
+from .frontend import async_serve as serve_dashboard
 from .services import register as register_services
 
 PLATFORMS = [Platform.SENSOR]
@@ -29,6 +30,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SettlementEntry) -> bool
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_options_updated))
     register_services(hass)
+    await serve_dashboard(hass)
     return True
 
 

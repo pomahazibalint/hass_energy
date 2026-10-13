@@ -46,6 +46,15 @@ jobs:
       - name: Vendored engine is up to date
         run: uv run python scripts/vendor_billing.py --check
 
+      # The dashboard is plain modules with no build step, so the one check
+      # is that each parses. Node reads a file as a module only under .mjs.
+      - name: Dashboard modules parse
+        run: |
+          for module in custom_components/hass_energy/www/*.js; do
+            copy="$RUNNER_TEMP/$(basename "$module" .js).mjs"
+            cp "$module" "$copy" && node --check "$copy"
+          done
+
       - name: Versions agree
         run: uv run python scripts/check_version.py
 
@@ -125,10 +134,12 @@ jobs:
           python scripts/render_check.py examples/packages
 
       # The integration needs Home Assistant to import at all, so its tests and
-      # type check live with the job that has it.
+      # type check live with the job that has it. The frontend package is a
+      # dependency of the integration, for the dashboard it serves, and Home
+      # Assistant installs it at runtime rather than declaring it.
       - name: Integration tests
         run: >
-          uv run --python 3.13 --with homeassistant
+          uv run --python 3.13 --with homeassistant --with home-assistant-frontend
           --with pytest-homeassistant-custom-component --no-project
           python -m pytest tests/integration -q -o asyncio_mode=auto -o addopts=
 

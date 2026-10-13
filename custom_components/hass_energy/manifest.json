@@ -6,6 +6,8 @@
   ],
   "config_flow": true,
   "dependencies": [
+    "http",
+    "frontend",
     "recorder"
   ],
   "after_dependencies": [

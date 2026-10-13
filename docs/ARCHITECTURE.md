@@ -307,10 +307,25 @@ both are priced under gross settlement whatever the entry's mode, because
 under szaldó annual netting is a free battery and the question is what the
 switch will cost.
 
+The dashboard is the integration's own, and it is a strategy: a JavaScript
+module that builds the dashboard's configuration in the browser when it is
+opened, from the integration's entries, their entities and the statistics
+they wrote, so nothing about the dashboard is stored and a second metering
+point is a second set of views. The user creates it from Home Assistant's
+new-dashboard dialog, which lists the strategy, and owns it like any other;
+the integration creates no dashboard and touches no Lovelace internals. The
+modules live in `www`, are served through the HTTP component's static paths
+under a URL that carries the version, and are loaded through the frontend's
+extra module hook, which works in both resource modes without an entry in
+the resources list. They are plain modules without a framework or a build
+step, for as long as the cards stay thin: the figures they show are tested
+in the backend, and the workflow checks that each module parses.
+
 Testing needs Home Assistant, so those tests live in `tests/integration` and run
 in the workflow job that installs it. They put hours into the recorder directly
 and run on a frozen clock. The engine's own tests need nothing and run
-everywhere.
+everywhere. The frontend package is installed there too, because the
+integration depends on the frontend component for the dashboard it serves.
 
 ## Releasing
 

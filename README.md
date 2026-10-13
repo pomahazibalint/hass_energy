@@ -25,7 +25,7 @@ They share a settlement engine and can be used separately.
 
 ## Installing the integration
 
-Requires Home Assistant 2025.11 or newer.
+Requires Home Assistant 2026.5 or newer.
 
 Via HACS, as a custom repository: add this repository's URL with category
 **Integration**, download it, and restart Home Assistant. Or by hand, copy
@@ -73,6 +73,14 @@ dashboard's settings each get a **cost** statistic and sensor, their share
 of each hour's consumption at that hour's cost, named as the dashboard names
 them. A device meter that claims more than the whole house used is capped
 there and reported through the same repair.
+
+The integration brings its own dashboard. Create it from **Settings >
+Dashboards > Add dashboard**, where **Energy settlement** is listed among
+the custom dashboards; it builds itself from your metering points and needs
+no configuration. It has a **Bill** view, the settlement as an invoice; a
+**Usage** view, the native energy cards beside the integration's house
+consumption, consumption cost and solar value statistics; and an
+**Outlook** view with the projections and the solar and battery figures.
 
 Where the period is heading is projected along last year's shape: the
 remaining days follow the same days a year earlier, scaled by how this

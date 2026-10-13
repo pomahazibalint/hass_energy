@@ -598,6 +598,39 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             for statistic, kwh in observed.devices.items()
         }
 
+    def disagreement_detail(self, limit: int = 24) -> list[dict[str, Any]]:
+        """The worst hours of the disagreement, with what every source had.
+
+        What a user needs to judge the finding: the flows the hour was read
+        with, what each device claimed, and which sources had no row at all
+        for it, since an inverter that dropped out for an hour reads as zero
+        production against export the grid meter did record.
+        """
+
+        observed = self.observed
+        if observed is None:
+            return []
+        losses = self._losses(observed)
+        by_start = {hour.start: hour for hour in observed.hours}
+        index = {hour.start: i for i, hour in enumerate(observed.hours)}
+        worst = sorted(losses, key=lambda start: losses[start], reverse=True)[:limit]
+        return [
+            {
+                "start": dt_util.as_local(start).isoformat(timespec="minutes"),
+                "lost_kwh": losses[start],
+                "imported_kwh": by_start[start].imported_kwh,
+                "exported_kwh": by_start[start].exported_kwh,
+                "produced_kwh": by_start[start].produced_kwh,
+                "charged_kwh": by_start[start].charged_kwh,
+                "discharged_kwh": by_start[start].discharged_kwh,
+                "devices_kwh": {
+                    statistic: kwh[index[start]] for statistic, kwh in observed.devices.items()
+                },
+                "no_row": observed.silent_in(start),
+            }
+            for start in worst
+        ]
+
     def _losses(self, observed: Observed) -> dict[datetime, float]:
         """The energy each hour lost to sources that cannot all be right.
 

@@ -189,10 +189,41 @@ async def test_sources_that_disagree_are_a_repair_not_a_smoothed_figure(
         "worst": dt_util.as_local(DAY_START + timedelta(hours=2)).isoformat(timespec="minutes"),
     }
 
+    report = await async_get_config_entry_diagnostics(hass, entry)
+    worst = report["disagreement"]["worst_hours"]
+    assert [hour["lost_kwh"] for hour in worst] == pytest.approx([2.5, 1.5])
+    assert worst[0]["start"] == dt_util.as_local(DAY_START + timedelta(hours=2)).isoformat(
+        timespec="minutes"
+    )
+    assert worst[0]["exported_kwh"] == 3.0
+    assert worst[0]["produced_kwh"] == 0.0
+    assert worst[0]["no_row"] == []
+
     await record(hass, PRODUCTION_ENTITY, DAY_START, [2.0, 0.0, 3.0])
     await refresh(hass, entry)
 
     assert ir.async_get(hass).async_get_issue(DOMAIN, f"sources_disagree_{entry.entry_id}") is None
+    report = await async_get_config_entry_diagnostics(hass, entry)
+    assert report["disagreement"]["worst_hours"] == []
+
+
+async def test_an_inverter_that_dropped_out_for_an_hour_is_named(
+    entry: MockConfigEntry, hass: HomeAssistant
+) -> None:
+    """Export the grid meter counted in an hour the inverter has no row for."""
+
+    await name_sources(hass, solar=[PRODUCTION_ENTITY])
+    await record(hass, IMPORT_ENTITY, DAY_START, [0.0, 0.0, 0.0])
+    await record(hass, EXPORT_ENTITY, DAY_START, [1.0, 4.0, 1.0])
+    await record(hass, PRODUCTION_ENTITY, DAY_START, [2.0])
+    await record(hass, PRODUCTION_ENTITY, DAY_START + timedelta(hours=2), [2.0])
+    await refresh(hass, entry)
+
+    report = await async_get_config_entry_diagnostics(hass, entry)
+    worst = report["disagreement"]["worst_hours"]
+    assert len(worst) == 1
+    assert worst[0]["lost_kwh"] == pytest.approx(4.0)
+    assert worst[0]["no_row"] == [PRODUCTION_ENTITY]
 
 
 async def test_a_solar_source_the_recorder_never_compiled_is_raised(

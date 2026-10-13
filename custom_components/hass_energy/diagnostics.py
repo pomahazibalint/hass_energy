@@ -126,6 +126,7 @@ async def async_get_config_entry_diagnostics(
                 if coordinator.disagreement.worst
                 else None
             ),
+            "worst_hours": coordinator.disagreement_detail(),
         },
         "household": household,
         "devices": devices,

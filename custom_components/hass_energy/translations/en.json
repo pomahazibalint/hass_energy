@@ -237,7 +237,7 @@
     },
     "sources_disagree": {
       "title": "Energy sources disagree in {hours} hours",
-      "description": "In {hours} hours of the settlement period the sources describe something that cannot have happened, {lost_kwh} kWh in all, worst in the hour starting {worst}: more energy left the house than entered it, or a device used more than the whole house did. A source is reporting in the wrong hour: an inverter that lags the grid meter, a production meter that counts what charged the battery, or a device meter that reports late. The energy dashboard reads the same rows and overstates consumption by the same amount. Point the solar source at the inverter's own energy statistic, exclude battery charging from it, or check the device's meter."
+      "description": "In {hours} hours of the settlement period the sources describe something that cannot have happened, {lost_kwh} kWh in all, worst in the hour starting {worst}: more energy left the house than entered it, or a device used more than the whole house did. Either a source has no statistics for that hour at all, such as an inverter whose sensors dropped out while the grid meter kept counting, or one is reporting in the wrong hour: an inverter that lags the grid meter, a production meter that counts what charged the battery, a device meter that reports late. The energy dashboard reads the same rows and overstates consumption by the same amount. The integration's diagnostics list the worst hours with what every source had and which had nothing; compare them with the energy dashboard's view of that day."
     }
   }
 }

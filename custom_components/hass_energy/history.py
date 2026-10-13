@@ -66,6 +66,16 @@ class Observed:
     end: datetime = field(default_factory=lambda: datetime.min.replace(tzinfo=UTC))
     sources: list[str] = field(default_factory=list)
     last_of: dict[str, datetime] = field(default_factory=dict)
+    #: The hours each source has a row for, as timestamps. An hour without
+    #: a row is one the source did not report, which reads as zero and is
+    #: worth telling apart from a zero it reported.
+    reported: dict[str, frozenset[float]] = field(default_factory=dict)
+
+    def silent_in(self, hour: datetime) -> list[str]:
+        """The sources that have no row for an hour."""
+
+        at = hour.timestamp()
+        return [source for source in self.sources if at not in self.reported.get(source, ())]
 
     @property
     def imported_kwh(self) -> float:
@@ -181,6 +191,7 @@ async def async_observe(
         end=end,
         sources=[*sources, *devices],
         last_of=last_of,
+        reported={source: frozenset(per_source) for source, per_source in changes.items()},
     )
 
 

@@ -52,10 +52,11 @@ A Home Assistant integration derives the settlement from the recorder's
 long-term statistics for the grid meters, for the two things generated YAML
 cannot express: prices that change inside a settlement period, and a period
 boundary set by a meter reading rather than a date. It publishes the bill's
-hourly movement as statistics the energy dashboard reads, and from the solar
-and battery sources named in that dashboard, what the house used and what the
-panels were worth. It ships its own copy of the settlement engine, so it
-installs by copying one directory and needs nothing at runtime.
+hourly movement as statistics the energy dashboard reads, and from the solar,
+battery and device sources named in that dashboard, what the house used,
+what the panels were worth, what consuming cost and what each device's share
+of that was. It ships its own copy of the settlement engine, so it installs
+by copying one directory and needs nothing at runtime.
 
 Dashboards are the remaining feature work, and the entities they need now
 exist: the executive view reads the projections, the diagnostics view reads the
@@ -67,10 +68,10 @@ energy, and the migration that got it there.
 
 [SETTLEMENT_DASHBOARD.md](SETTLEMENT_DASHBOARD.md) plans what comes next on
 the integration route and records how far it has got: house consumption and
-solar value from the energy dashboard's own sources are done; cost per
-device, projections that follow last year's shape, a battery what-if, and a
-dashboard of the integration's own that shows them beside the native cards
-are to come.
+solar value from the energy dashboard's own sources, and the cost of
+consuming with each device's share of it, are done; projections that follow
+last year's shape, a battery what-if, and a dashboard of the integration's
+own that shows them beside the native cards are to come.
 
 ## Ideas backlog
 - Tariff plugins, only when a second tariff arrives with a real user

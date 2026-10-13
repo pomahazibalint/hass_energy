@@ -1,12 +1,15 @@
 # Settlement dashboard
 
-Status, 12 October 2026: the first release below, house consumption and
-solar value, is implemented on `main` and not yet released. The three that
-follow are not started. Two things the implementation settled that the
-plan had left open: the house's figures begin only where the grid record
-and every named household source exist, and an hour that carries the seeded
-remainder is left out of every statistic; both are recorded in "Sources"
-and "Edge cases" below.
+Status, 13 October 2026: the first two releases below, house consumption
+and solar value, and consumption cost and devices, are implemented on
+`main` and not yet released. The two that follow are not started. Things
+the implementation settled that the plan had left open are recorded where
+they belong: the house's figures begin only where the grid record and every
+named household source exist, an hour that carries the seeded remainder is
+left out of every statistic, a device's figures begin at its own first hour
+without gating the house's, and the house's consumption cost is a statistic
+and a sensor of its own; see "Sources", "Consumption cost and devices" and
+"Edge cases".
 
 A plan to give the integration the figures Home Assistant's energy dashboard
 cannot produce, and a dashboard of its own that shows them beside the parts of
@@ -172,14 +175,33 @@ reconciled by the cost statistics; this figure answers a different question,
 what each thing that ran was worth not running. The solar value is its
 complement.
 
+The house's figure is published like the others: a statistic,
+`hass_energy:<entry>_consumption_cost`, each row an hour's cost, and a
+sensor for the period, from the same first hour as the house's consumption.
+It is the figure the Devices view divides up, so the part no device accounts
+for can be shown as the rest of the house.
+
 A device's cost in an hour is its share of the hour's consumption at that
 hour's consumption cost. Devices come from the preferences, with their names,
 and a device that includes another's consumption in its total carries that
 cost too, as the dashboard's own device graph does. Each device gets a
 statistic, `hass_energy:<entry>_device_<slug>_cost`, and a sensor for the
-period. A device whose share exceeds the hour's consumption, which a
-misaligned device meter can produce, is capped at the hour's cost and
-counted into the same repair as the consumption identity.
+period, named as the dashboard names the device and following a rename. The
+slug is of the device's statistic id, not its name, so a rename does not
+start a second series. A device's figures run from its own first hour as
+well as the house's: a meter that began recording last month used something
+unknown before that, not nothing. A device gates nothing of the house, since
+it says nothing about the house's flows. A device whose share exceeds the
+hour's consumption, which a misaligned device meter can produce, is capped
+at the hour's cost and counted into the same repair as the consumption
+identity, from the hour the house is known.
+
+The sensors for devices follow the preferences rather than the entry's
+setup: a device named in the dashboard gets its sensor on the next refresh,
+and one dropped has its sensor removed from the registry and its statistic
+cleared. Removing the entry clears whatever the recorder holds under the
+entry's name, which is how statistics named after devices the integration
+no longer knows about are found.
 
 ### Projections by season
 
@@ -303,12 +325,15 @@ the frontend; the figures show in the native dashboard's own cards and
 statistics graphs, which is the first test of whether they are the right
 figures.
 
-Consumption cost and devices. Next. The engine gains the hourly consumption
-cost, the integration the per-device statistics and sensors, and the
-diagnostics the device shares.
+Consumption cost and devices. Done. The engine gained the hourly consumption
+cost, the integration the consumption cost and per-device statistics and
+sensors, and the diagnostics the device shares. The engine's part is a
+second walk of the same ledger `allocate` uses, `marginal`, which prices any
+hour against any alternative for that hour alone, and the no-consumption
+alternative is a method on the hour's flows beside the no-solar one.
 
-Projections. The daily reader, the seasonal projection and its sensors, and
-the battery what-if with its options.
+Projections. Next. The daily reader, the seasonal projection and its
+sensors, and the battery what-if with its options.
 
 The dashboard. The strategy module, its registration, the Bill card and
 the Usage and Outlook views. The Devices and History cards follow in the

@@ -88,6 +88,8 @@ def sources_of(prefs: dict[str, Any] | None) -> dict[str, str]:
         elif kind == "battery":
             found[source["stat_energy_from"]] = "discharge"
             found[source["stat_energy_to"]] = "charge"
+    for device in (prefs or {}).get("device_consumption", []):
+        found[device["stat_consumption"]] = "device"
     return found
 
 
@@ -155,18 +157,30 @@ async def main() -> None:
             cursor += timedelta(hours=1)
 
     print()
-    print("Balance per hour: import + solar + discharge - export - charge; negative disagrees.")
+    print("Balance per hour: import + solar + discharge - export - charge; negative disagrees,")
+    print("and so does a device that used more than the balance.")
     cursor = start.replace(minute=0, second=0, microsecond=0)
     signs = {"import": 1, "solar": 1, "discharge": 1, "export": -1, "charge": -1}
+
+    def change_of(statistic: str, at: datetime) -> float:
+        by_start = {row["start"]: row for row in rows.get(statistic, [])}
+        row = by_start.get(at.timestamp() * 1000) or by_start.get(at.timestamp())
+        return max((row or {}).get("change") or 0.0, 0.0)
+
     while cursor < end:
-        total = 0.0
+        total = sum(
+            signs[role] * change_of(statistic, cursor)
+            for statistic, role in roles.items()
+            if role in signs
+        )
+        flags = ["energy left that never entered"] if total < -1e-6 else []
         for statistic, role in roles.items():
-            by_start = {row["start"]: row for row in rows.get(statistic, [])}
-            row = by_start.get(cursor.timestamp() * 1000) or by_start.get(cursor.timestamp())
-            change = (row or {}).get("change") or 0.0
-            total += signs.get(role, 0) * max(change, 0.0)
-        flag = "   <- energy left that never entered" if total < -1e-6 else ""
-        print(f"  {cursor:%Y-%m-%d %H:%M}  {total:8.3f}{flag}")
+            used = change_of(statistic, cursor) if role == "device" else 0.0
+            house = max(total, 0.0)
+            if used > house + 1e-6:
+                flags.append(f"{statistic} used {used:.3f}, {used - house:.3f} above the house")
+        marker = ("   <- " + "; ".join(flags)) if flags else ""
+        print(f"  {cursor:%Y-%m-%d %H:%M}  {total:8.3f}{marker}")
         cursor += timedelta(hours=1)
 
 

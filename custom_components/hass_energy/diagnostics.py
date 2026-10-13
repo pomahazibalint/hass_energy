@@ -128,6 +128,10 @@ async def async_get_config_entry_diagnostics(
             ),
             "worst_hours": coordinator.disagreement_detail(),
         },
+        "device_bursts": {
+            name: {"hours": hours, "excess_kwh": excess}
+            for name, (hours, excess) in coordinator.device_bursts().items()
+        },
         "household": household,
         "devices": devices,
         "period": coordinator.state.as_dict(),

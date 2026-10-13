@@ -162,11 +162,14 @@ async def test_a_device_above_the_house_is_capped_and_reported(
 
     hourly = states(await rows(hass, entry, device_rows(entry, WASHER)))
     assert hourly[:2] == pytest.approx([1 * BAND * VAT, 0.5 * BAND * VAT], abs=1e-4)
-    issue = ir.async_get(hass).async_get_issue(DOMAIN, f"sources_disagree_{entry.entry_id}")
+    registry = ir.async_get(hass)
+    issue = registry.async_get_issue(DOMAIN, f"device_bursts_{entry.entry_id}")
     assert issue is not None
-    assert issue.translation_placeholders is not None
-    assert issue.translation_placeholders["hours"] == "1"
-    assert issue.translation_placeholders["lost_kwh"] == "2.0"
+    assert issue.translation_placeholders == {"devices": "Washer: 1 hour, 2.0 kWh above the house"}
+    # The house's own figures agree with each other; that repair stays quiet.
+    assert registry.async_get_issue(DOMAIN, f"sources_disagree_{entry.entry_id}") is None
+    report = await async_get_config_entry_diagnostics(hass, entry)
+    assert report["device_bursts"] == {"Washer": {"hours": 1, "excess_kwh": pytest.approx(2.0)}}
 
 
 async def test_a_device_dropped_from_the_dashboard_takes_its_figures_with_it(

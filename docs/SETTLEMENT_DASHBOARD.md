@@ -201,9 +201,12 @@ start a second series. A device's figures run from its own first hour as
 well as the house's: a meter that began recording last month used something
 unknown before that, not nothing. A device gates nothing of the house, since
 it says nothing about the house's flows. A device whose share exceeds the
-hour's consumption, which a misaligned device meter can produce, is capped
-at the hour's cost and counted into the same repair as the consumption
-identity, from the hour the house is known.
+hour's consumption, which a meter that books a session's energy in the hour
+the session ends produces, is capped at the hour's cost and reported
+through a repair of its own that names the device, from the hour the house
+is known. It is not the house's disagreement: the meter is right about the
+total and wrong about the hours, and the hours it really ran in are the
+rest of the house.
 
 The sensors for devices follow the preferences rather than the entry's
 setup: a device named in the dashboard gets its sensor on the next refresh,

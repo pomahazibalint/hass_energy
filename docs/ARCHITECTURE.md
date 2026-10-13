@@ -290,8 +290,9 @@ preferences, are each costed at their share of the hour's consumption at
 that price, so a device that runs at noon on the panels and one that runs
 at night on the grid are told apart. Their statistics and sensors come and
 go with the preferences, and a device that claims more than the whole house
-used is capped there and reported through the same repair as the house's
-own disagreement.
+used is capped there and reported through a repair of its own, naming the
+device, because a meter that books a session in the hour it ends is a
+different finding from a house whose sources disagree.
 
 The period is projected along last year's shape rather than a straight
 line, because a straight line is least reliable across a change of season,

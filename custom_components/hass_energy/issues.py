@@ -147,6 +147,29 @@ def sources_disagree(
     )
 
 
+def device_bursts(hass: HomeAssistant, entry_id: str, bursts: dict[str, tuple[int, float]]) -> None:
+    """A device meter claimed more in an hour than the whole house used.
+
+    The meter reports in bursts, a session's energy in the hour it ended.
+    Its cost for such an hour is capped at the house's, so the burst is
+    costed as if the house had used it, and the hours it really ran in are
+    the rest of the house. Worth knowing, not worth alarm.
+    """
+
+    _set(
+        hass,
+        entry_id,
+        "device_bursts",
+        active=bool(bursts),
+        placeholders={
+            "devices": "; ".join(
+                f"{name}: {hours} hour{'s' if hours != 1 else ''}, {excess:.1f} kWh above the house"
+                for name, (hours, excess) in bursts.items()
+            ),
+        },
+    )
+
+
 def running_totals_retired(hass: HomeAssistant, entry_id: str) -> None:
     """Withdraw the notice that announced the running-total sensors' retirement.
 

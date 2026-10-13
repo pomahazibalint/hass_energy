@@ -97,11 +97,12 @@ NOMINAL_PERIOD_DAYS = 365
 
 @dataclass(frozen=True)
 class Disagreement:
-    """Hours in which the sources describe something that cannot have happened.
+    """Hours in which energy left the house without having entered it.
 
-    Energy that left the house without having entered it, or a device that
-    used more than the whole house did. Either is a source reporting in the
-    wrong hour, and the finding is reported rather than smoothed over.
+    That cannot happen, so a source is reporting in the wrong hour, and the
+    finding is reported rather than smoothed over. A device that claims
+    more than the house used is a different finding, with its own repair:
+    a meter that reports in bursts.
     """
 
     hours: int = 0
@@ -363,6 +364,7 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             self.disagreement.lost_kwh,
             self.disagreement.worst,
         )
+        issues.device_bursts(self.hass, self.entry.entry_id, self.device_bursts())
 
         if not covered:
             # Every derived figure is unanswerable, which is not the same as
@@ -637,8 +639,7 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         Export above import is a shortfall only once the household's other
         sources are known: before the first hour they cover it is production
         nobody recorded, and with none named at all there is nothing to
-        disagree. A device above the house is counted from the hour the
-        house is known.
+        disagree.
         """
 
         losses: defaultdict[datetime, float] = defaultdict(float)
@@ -647,11 +648,27 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             for hour in observed.hours:
                 if hour.start >= since and hour.shortfall_kwh > 0:
                     losses[hour.start] += hour.shortfall_kwh
-        for excess in self.device_excess.values():
-            for hour, lost in zip(observed.hours, excess, strict=True):
-                if lost > 0:
-                    losses[hour.start] += lost
         return dict(losses)
+
+    def device_bursts(self) -> dict[str, tuple[int, float]]:
+        """Devices that claimed more than the house used, by name.
+
+        Each with the hours it did so in and the energy above the house in
+        all. A meter that reports a session's energy when the session ends
+        puts it all into one hour; its cost for that hour is capped at the
+        house's, and what it used in the hours before is the rest of the
+        house. The meter is right about the total and wrong about the hours.
+        """
+
+        bursts: dict[str, tuple[int, float]] = {}
+        for statistic, excess in self.device_excess.items():
+            hours = sum(1 for lost in excess if lost > 0)
+            if not hours:
+                continue
+            device = self.sources.device(statistic)
+            name = device.name if device else statistic
+            bursts[name] = (hours, sum(excess))
+        return bursts
 
     def _with_unobserved(self, observed: Observed) -> tuple[list[Flows], set[datetime]]:
         """Lay the unobserved remainder over the hours before the record begins.

@@ -237,7 +237,11 @@
     },
     "sources_disagree": {
       "title": "Energy sources disagree in {hours} hours",
-      "description": "In {hours} hours of the settlement period the sources describe something that cannot have happened, {lost_kwh} kWh in all, worst in the hour starting {worst}: more energy left the house than entered it, or a device used more than the whole house did. Either a source has no statistics for that hour at all, such as an inverter whose sensors dropped out while the grid meter kept counting, or one is reporting in the wrong hour: an inverter that lags the grid meter, a production meter that counts what charged the battery, a device meter that reports late. The energy dashboard reads the same rows and overstates consumption by the same amount. The integration's diagnostics list the worst hours with what every source had and which had nothing; compare them with the energy dashboard's view of that day."
+      "description": "In {hours} hours of the settlement period more energy left the house than entered it, {lost_kwh} kWh in all, worst in the hour starting {worst}. That cannot happen, so either a source has no statistics for the hour at all, such as an inverter whose sensors dropped out while the grid meter kept counting, or one is reporting in the wrong hour: an inverter that lags the grid meter, or a production meter that counts what charged the battery. The energy dashboard reads the same rows and overstates consumption by the same amount. The integration's diagnostics list the worst hours with what every source had and which had nothing; compare them with the energy dashboard's view of that day."
+    },
+    "device_bursts": {
+      "title": "Device meters report in bursts",
+      "description": "{devices}. A meter that books a session's energy in the hour the session ends puts more into that hour than the whole house used in it. The total is right, the hours are not: the device's cost for such an hour is capped at the house's, and what it really used in the hours before counts as the rest of the house. Nothing is wrong with the settlement; the device's cost is only as good as its meter's timing."
     }
   }
 }

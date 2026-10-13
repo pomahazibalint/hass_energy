@@ -122,9 +122,11 @@ async def main() -> None:
         ids = args.sources or list(roles)
         if not ids:
             sys.exit("The energy dashboard names no sources; pass --sources.")
+        # The listing takes no id filter; it is the whole recorder's.
         metadata = {
             one["statistic_id"]: one
-            for one in await hass.call(type="recorder/list_statistic_ids", statistic_ids=ids)
+            for one in await hass.call(type="recorder/list_statistic_ids")
+            if one["statistic_id"] in ids
         }
         rows = await hass.call(
             type="recorder/statistics_during_period",

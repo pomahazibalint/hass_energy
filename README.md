@@ -84,9 +84,10 @@ distribution or sankey, the solar graph, the gauges, the sources table and
 the device graphs, beside the integration's own figures and a table of
 energy and cost per device over the settlement period with the rest of the
 house. **History** is each grid meter and the house by calendar month, this
-year over the two before it, and past settlements. The integration and the
-dashboard are in English and Hungarian, following your Home Assistant
-language.
+year over the two before it, and past settlements. Tap any line of the
+invoice or any device to see how its figure came to be: so many kWh at
+which price, and what was added to what. The integration and the dashboard
+are in English and Hungarian, following your Home Assistant language.
 
 Where the period is heading is projected along last year's shape: the
 remaining days follow the same days a year earlier, scaled by how this

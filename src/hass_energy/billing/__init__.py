@@ -18,6 +18,7 @@ from .engine import calculate
 from .flows import Flows, device_share, solar_value, with_battery
 from .prices import Prices, PriceSchedule, Segment
 from .projection import Day, a_year_before, allowance_runs_out, hours_of, project
+from .rates import Rate, rate_of, rates
 from .series import Hour, HourCost, allocate, marginal, settle
 from .terms import AllowanceBasis, SettlementMode, TariffTerms
 
@@ -32,6 +33,7 @@ __all__ = [
     "MeterReadings",
     "PriceSchedule",
     "Prices",
+    "Rate",
     "Segment",
     "SettlementMode",
     "SettlementPeriod",
@@ -46,6 +48,8 @@ __all__ = [
     "hours_of",
     "marginal",
     "project",
+    "rate_of",
+    "rates",
     "settle",
     "solar_value",
     "with_battery",

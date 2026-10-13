@@ -38,6 +38,7 @@ from .billing import (
     HourCost,
     Prices,
     PriceSchedule,
+    Rate,
     SettlementMode,
     SettlementPeriod,
     TariffTerms,
@@ -49,6 +50,7 @@ from .billing import (
     hours_of,
     marginal,
     project,
+    rates,
     settle,
     solar_value,
     with_battery,
@@ -283,6 +285,7 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         #: the whole house, which is the device's part of the disagreement.
         self.consumption_costs: list[float] = []
         self.device_costs: dict[str, list[float]] = {}
+        self.rates: list[Rate] = []
         self.device_excess: dict[str, list[float]] = {}
         #: Hours carrying the seeded remainder, which are the invoice's
         #: hours rather than the recorder's and count in no figure of the
@@ -393,6 +396,19 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         )
         self.consumption_costs = costs if observed.hours else []
         self.device_costs = self._device_costs(observed)
+        # What price each hour's consumption was worth: the ingredient a
+        # figure explains itself with, so many kWh at this price.
+        self.rates = (
+            rates(
+                observed.hours,
+                self.consumption_costs,
+                contract.schedule,
+                contract.terms,
+                contract.tz,
+            )
+            if observed.hours
+            else []
+        )
 
         self.outlook = await self._project(contract, hours, bill, observed)
         battery = battery_from_options(self.entry.options)
@@ -761,6 +777,75 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         if self.house_since() is None or not self.consumption_costs:
             return None
         return forint(self._seen(self.consumption_costs, self.house_since()))
+
+    def breakdown(self, kwh_per_hour: Sequence[float], since: datetime | None) -> dict[str, float]:
+        """How much energy was worth which price, over the hours the house is known.
+
+        The figures a cost explains itself with: so many kWh at the
+        subsidized price, so many at the market price, so many at the
+        feed-in price, so many in hours that straddled two, and the average
+        per kWh that came out of it. For the house the energy is each
+        hour's consumption; for a device, its share of it.
+        """
+
+        by_rate = dict.fromkeys(Rate, 0.0)
+        if self.observed is not None and since is not None:
+            for hour, kwh, rate in zip(self.observed.hours, kwh_per_hour, self.rates, strict=True):
+                if hour.start >= since and hour.start not in self.seeded:
+                    by_rate[rate] += kwh
+        return {
+            "kwh_at_subsidized": round(by_rate[Rate.SUBSIDIZED], 3),
+            "kwh_at_market": round(by_rate[Rate.MARKET], 3),
+            "kwh_at_feed_in": round(by_rate[Rate.FEED_IN], 3),
+            "kwh_mixed": round(by_rate[Rate.MIXED], 3),
+        }
+
+    def prices_with_vat(self) -> dict[str, float]:
+        """Today's prices as a consumer meets them, for an explanation to quote."""
+
+        prices = self._prices_today()
+        vat = 1 + terms_from_options(self.entry.options).vat_percent / 100
+        return {
+            "subsidized_price_with_vat": round(prices.subsidized * vat, 2),
+            "market_price_with_vat": round(prices.market * vat, 2),
+            "feed_in_price": prices.feed_in,
+        }
+
+    def consumption_breakdown(self) -> dict[str, float]:
+        since = self.house_since()
+        if self.observed is None or since is None:
+            return {}
+        used = self._seen([hour.consumption_kwh for hour in self.observed.hours], since)
+        cost = self._seen(self.consumption_costs, since)
+        return {
+            **self.breakdown([hour.consumption_kwh for hour in self.observed.hours], since),
+            "average_per_kwh": round(cost / used, 2) if used else 0.0,
+            **self.prices_with_vat(),
+        }
+
+    def device_breakdown(self, statistic: str) -> dict[str, float | int]:
+        """A device's share of each hour, by the price the hour was worth."""
+
+        since = self.device_since(statistic)
+        if self.observed is None or since is None or statistic not in self.observed.devices:
+            return {}
+        used = self.observed.devices[statistic]
+        capped = [
+            min(kwh, hour.consumption_kwh)
+            for hour, kwh in zip(self.observed.hours, used, strict=True)
+        ]
+        energy = self._seen(capped, since)
+        cost = self._seen(self.device_costs.get(statistic, []), since)
+        house = self.household_consumption_kwh()
+        excess = self.device_excess.get(statistic, [])
+        return {
+            **self.breakdown(capped, since),
+            "average_per_kwh": round(cost / energy, 2) if energy else 0.0,
+            "share_of_house": round(energy / house, 4) if house else 0.0,
+            "capped_hours": sum(1 for lost in excess if lost > 0),
+            "excess_kwh": round(sum(excess), 3),
+            **self.prices_with_vat(),
+        }
 
     def device_kwh_total(self, statistic: str) -> float:
         if self.observed is None or statistic not in self.observed.devices:

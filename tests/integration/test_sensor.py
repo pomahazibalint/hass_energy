@@ -2,6 +2,7 @@
 
 from datetime import date, timedelta
 
+import pytest
 from custom_components.hass_energy.const import CONF_PRICES
 from custom_components.hass_energy.settings import price_entry
 from homeassistant.core import HomeAssistant
@@ -133,3 +134,25 @@ async def test_the_feed_in_price_follows_a_price_change(
     await hass.async_block_till_done()
 
     assert float(state_of(hass, "current_feed_in_price")) == 7.5
+
+
+async def test_every_money_line_carries_the_figures_it_was_made_of(
+    entry: MockConfigEntry, hass: HomeAssistant
+) -> None:
+    await record(hass, IMPORT_ENTITY, DAY_START, [10.0])
+    await refresh(hass, entry)
+
+    payable = hass.states.get(PREFIX + "total_payable")
+    assert payable is not None
+    assert payable.attributes["energy_net"] == pytest.approx(10 * 40.0)
+    assert payable.attributes["standing_charge_net"] == pytest.approx(12 * 120.5)
+    assert payable.attributes["vat_percent"] == 27.0
+    energy = hass.states.get(PREFIX + "energy_cost")
+    assert energy is not None
+    assert energy.attributes["subsidized_kwh"] == pytest.approx(10.0)
+    assert energy.attributes["lines"][0]["unit_price"] == 40.0
+    standing = hass.states.get(PREFIX + "standing_charge")
+    assert standing is not None
+    assert standing.attributes["months"] == 12
+    assert standing.attributes["per_month"] == 120.5
+

@@ -16,6 +16,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from .conftest import (
     DAY_START,
+    EXPORT_ENTITY,
     IMPORT_ENTITY,
     PRODUCTION_ENTITY,
     coordinator,
@@ -321,3 +322,36 @@ async def test_diagnostics_report_the_devices(
     assert statistic_id(entry.entry_id, device_rows(entry, WASHER)).endswith(
         "_device_sensor_washer_energy_cost"
     )
+
+
+async def test_a_devices_cost_carries_the_figures_it_was_made_of(
+    entry: MockConfigEntry, hass: HomeAssistant
+) -> None:
+    """Two kWh at the band price, one kWh of solar in surplus at the feed-in price."""
+
+    await name_sources(hass, solar=[PRODUCTION_ENTITY], devices=[device(WASHER, name="Washer")])
+    await record(hass, IMPORT_ENTITY, DAY_START, [4.0, 0.0, 0.0])
+    await record(hass, EXPORT_ENTITY, DAY_START, [0.0, 100.0, 0.0])
+    await record(hass, PRODUCTION_ENTITY, DAY_START, [0.0, 100.0, 2.0])
+    await record(hass, WASHER, DAY_START, [2.0, 0.0, 1.0])
+    await refresh(hass, entry)
+
+    washer = hass.states.get(PREFIX + "washer_cost")
+    assert washer is not None
+    attributes = washer.attributes
+    assert attributes["kwh_at_subsidized"] == pytest.approx(2.0)
+    assert attributes["kwh_at_feed_in"] == pytest.approx(1.0)
+    assert attributes["kwh_at_market"] == 0.0
+    assert attributes["kwh_mixed"] == 0.0
+    assert attributes["share_of_house"] == pytest.approx(3 / 6)
+    assert attributes["capped_hours"] == 0
+    assert attributes["subsidized_price_with_vat"] == pytest.approx(BAND * VAT)
+    assert attributes["feed_in_price"] == FEED_IN
+    assert attributes["average_per_kwh"] == pytest.approx((2 * BAND * VAT + FEED_IN) / 3, abs=0.01)
+
+    house = hass.states.get(PREFIX + "consumption_cost")
+    assert house is not None
+    assert house.attributes["energy_kwh"] == pytest.approx(6.0)
+    assert house.attributes["kwh_at_subsidized"] == pytest.approx(4.0)
+    assert house.attributes["kwh_at_feed_in"] == pytest.approx(2.0)
+

@@ -345,6 +345,33 @@ before, because a build pipeline is a second codebase to maintain in a Python
 repository. The workflow checks that each module parses, and the cards'
 behaviour is covered by the backend tests of the figures they display.
 
+## How a figure came to be
+
+A figure the user cannot follow is a figure the user does not trust, and a
+device's cost, its share of each hour at what not consuming in that hour
+would have saved, is the hardest to follow. The answer is the same for
+every money line and it is not prose from the backend: every money sensor
+carries the figures it was made of as attributes, numbers and never words,
+and the cards phrase them in the user's language when a line is tapped.
+The attributes show in Home Assistant's own more-info dialog too.
+
+For the costs priced hour by hour, the house's and each device's, the
+figures are how much energy was worth which price. The engine names the
+rate of each hour by comparing the hour's cost per kWh with the prices in
+force that day: the subsidized price with VAT while the allowance lasts and
+a kWh would net, the market price with VAT once it has run out, the feed-in
+price once the period is in surplus or, under gross settlement, for what the
+panels supplied, and mixed for an hour that straddled two. A device's share
+of each hour goes into the same buckets, so the sentence reads: so many kWh
+at the subsidized price with VAT, so many at the feed-in price, so many in
+between, this much per kWh on average, and how many hours the meter was
+capped at the house's. The invoice's lines are simpler and carry what they
+always were: energy as subsidized and market kWh with their lines, the
+standing charge as months times the monthly charge, VAT as the rate on the
+net total, the total as its three parts, the net position as the total
+less the surplus owed, the solar value as the two net positions, the
+allowance as used over earned, and the period as its dates.
+
 ## Edge cases
 
 Alignment. Every derived hour is only as true as the sources' hour alignment,
@@ -425,7 +452,8 @@ needs no registry lookup.
 
 After the plan: the five views became three in the sections grid, the
 native energy cards came in, the History card gained the hover tooltip the
-native charts have, and the dashboard and the integration gained Hungarian.
+native charts have, the dashboard and the integration gained Hungarian, and
+every money line can say how it came to be; see "How a figure came to be".
 
 The engine's new rules, the counterfactual, the hourly consumption cost and
 the seasonal projection, are tested in `tests/` without Home Assistant. The

@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -29,7 +30,7 @@ from .const import DOMAIN
 from .coordinator import SettlementCoordinator
 from .costs import device_kind
 from .preferences import Device
-from .settings import terms_from_options
+from .settings import battery_from_options, terms_from_options
 
 KWH = UnitOfEnergy.KILO_WATT_HOUR
 
@@ -46,6 +47,10 @@ class SettlementSensorDescription(SensorEntityDescription):
     #: Whether the line can be answered at all. A figure whose sources the
     #: household lacks is unavailable, not zero.
     available: Callable[[SettlementCoordinator], bool] = lambda c: True
+    #: The figures the line was made of, as attributes, so a card can say
+    #: how it came to be in the user's language and the more-info dialog
+    #: shows them as they are. Numbers, never words.
+    behind: Callable[[SettlementCoordinator], dict[str, Any]] | None = None
 
 
 SENSORS: tuple[SettlementSensorDescription, ...] = (
@@ -89,6 +94,11 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         native_unit_of_measurement=KWH,
         state_class=SensorStateClass.MEASUREMENT,
         value=lambda c: round(c.data.allowance_remaining_kwh, 3),
+        behind=lambda c: {
+            "allowance_kwh": round(c.data.allowance_kwh, 3),
+            "allowance_used_kwh": round(c.data.allowance_used_kwh, 3),
+            "period_days": c.data.period.days,
+        },
     ),
     SettlementSensorDescription(
         key="energy_cost",
@@ -96,6 +106,21 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         monetary=True,
         value=lambda c: round(c.data.energy_net, 2),
+        behind=lambda c: {
+            "subsidized_kwh": round(c.data.subsidized_kwh, 3),
+            "market_kwh": round(c.data.market_kwh, 3),
+            "lines": [
+                {
+                    "from": line.start.isoformat(),
+                    "to": line.end.isoformat(),
+                    "band": band,
+                    "kwh": round(line.kwh, 3),
+                    "unit_price": line.unit_price,
+                }
+                for band, lines in (("subsidized", c.data.subsidized), ("market", c.data.market))
+                for line in lines
+            ],
+        },
     ),
     SettlementSensorDescription(
         key="standing_charge",
@@ -103,6 +128,12 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         monetary=True,
         value=lambda c: round(c.data.standing_charge_net, 2),
+        behind=lambda c: {
+            "months": c.data.standing_charge_months,
+            "per_month": round(c.data.standing_charge_net / c.data.standing_charge_months, 2)
+            if c.data.standing_charge_months
+            else 0.0,
+        },
     ),
     SettlementSensorDescription(
         key="vat",
@@ -110,6 +141,7 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         monetary=True,
         value=lambda c: c.data.vat,
+        behind=lambda c: {"percent": c.data.vat_percent, "net_total": round(c.data.net_total, 2)},
     ),
     SettlementSensorDescription(
         key="total_payable",
@@ -117,6 +149,12 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         monetary=True,
         value=lambda c: c.data.gross_total,
+        behind=lambda c: {
+            "energy_net": round(c.data.energy_net, 2),
+            "standing_charge_net": round(c.data.standing_charge_net, 2),
+            "vat": c.data.vat,
+            "vat_percent": c.data.vat_percent,
+        },
     ),
     SettlementSensorDescription(
         key="surplus_value",
@@ -124,6 +162,18 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         monetary=True,
         value=lambda c: c.data.surplus_net,
+        behind=lambda c: {
+            "surplus_kwh": round(c.data.surplus_kwh, 3),
+            "lines": [
+                {
+                    "from": line.start.isoformat(),
+                    "to": line.end.isoformat(),
+                    "kwh": round(line.kwh, 3),
+                    "unit_price": line.unit_price,
+                }
+                for line in c.data.surplus
+            ],
+        },
     ),
     SettlementSensorDescription(
         key="net_position",
@@ -131,6 +181,7 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         monetary=True,
         value=lambda c: c.data.net_position,
+        behind=lambda c: {"total_payable": c.data.gross_total, "surplus_owed": c.data.surplus_net},
     ),
     SettlementSensorDescription(
         key="period_days",
@@ -138,6 +189,10 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         native_unit_of_measurement="d",
         state_class=SensorStateClass.MEASUREMENT,
         value=lambda c: c.days_elapsed(),
+        behind=lambda c: {
+            "period_start": c.data.period.start.isoformat(),
+            "period_end": c.data.period.end.isoformat(),
+        },
     ),
     # Home Assistant's own energy dashboard wants a price, not a bill. Point
     # its "use an entity tracking the price" option at this.
@@ -185,6 +240,14 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         monetary=True,
         available=lambda c: c.solar_value_total() is not None,
         value=lambda c: c.solar_value_total() or 0,
+        behind=lambda c: {
+            "net_position_without_panels": (
+                c.bill_without_solar.net_position if c.bill_without_solar else None
+            ),
+            "net_position": c.data.net_position,
+            "solar_kept_kwh": round(c.household_solar_kept_kwh(), 3),
+            "exported_kwh": round(c.data.readings.exported_kwh, 3),
+        },
     ),
     # What consuming cost: what each hour would have saved had nothing been
     # consumed in it. Marginal, so it does not sum to the invoice.
@@ -195,6 +258,10 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         monetary=True,
         available=lambda c: c.consumption_cost_total() is not None,
         value=lambda c: c.consumption_cost_total() or 0,
+        behind=lambda c: {
+            "energy_kwh": round(c.household_consumption_kwh(), 3),
+            **c.consumption_breakdown(),
+        },
     ),
     # Where the period is heading, following last year's shape where it is
     # known and the straight line where it is not. Measurements rather than
@@ -206,6 +273,13 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         monetary=True,
         available=lambda c: c.outlook is not None,
         value=lambda c: c.outlook.bill.gross_total if c.outlook else None,
+        behind=lambda c: {
+            "so_far": c.data.gross_total,
+            "billed_kwh_so_far": round(c.data.billed_kwh, 3),
+            "projected_billed_kwh": round(c.outlook.bill.billed_kwh, 3) if c.outlook else None,
+            "days_remaining": c.outlook.days_remaining if c.outlook else None,
+            "days_from_last_year": c.outlook.days_from_last_year if c.outlook else None,
+        },
     ),
     SettlementSensorDescription(
         key="projected_billed_energy",
@@ -232,6 +306,10 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         monetary=True,
         available=lambda c: c.battery_saving is not None,
         value=lambda c: c.battery_saving,
+        behind=lambda c: {
+            "capacity_kwh": (b := battery_from_options(c.entry.options)) and b.capacity_kwh,
+            "round_trip_efficiency": b and b.round_trip_efficiency,
+        },
     ),
 )
 
@@ -302,18 +380,27 @@ class SettlementSensor(CoordinatorEntity[SettlementCoordinator], SensorEntity):
         return self.entity_description.value(self.coordinator)
 
     @property
-    def extra_state_attributes(self) -> dict[str, str] | None:
-        if self.entity_description.key != "total_payable":
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """The figures the line was made of; the payable line carries the period too."""
+
+        coordinator = self.coordinator
+        if coordinator.data is None:
             return None
-        bill = self.coordinator.data
-        return {
-            "period_start": bill.period.start.isoformat(),
-            "period_end": bill.period.end.isoformat(),
-            "days_elapsed": str(self.coordinator.days_elapsed()),
-            "allowance_kwh": f"{bill.allowance_kwh:.1f}",
-            "imported_kwh": f"{bill.readings.imported_kwh:.3f}",
-            "exported_kwh": f"{bill.readings.exported_kwh:.3f}",
-        }
+        behind = self.entity_description.behind
+        attributes: dict[str, Any] = dict(behind(coordinator)) if behind else {}
+        if self.entity_description.key == "total_payable":
+            bill = coordinator.data
+            attributes.update(
+                {
+                    "period_start": bill.period.start.isoformat(),
+                    "period_end": bill.period.end.isoformat(),
+                    "days_elapsed": str(coordinator.days_elapsed()),
+                    "allowance_kwh": f"{bill.allowance_kwh:.1f}",
+                    "imported_kwh": f"{bill.readings.imported_kwh:.3f}",
+                    "exported_kwh": f"{bill.readings.exported_kwh:.3f}",
+                }
+            )
+        return attributes or None
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -375,8 +462,8 @@ class DeviceCostSensor(CoordinatorEntity[SettlementCoordinator], SensorEntity):
         return self.coordinator.device_cost_total(self.statistic) or 0
 
     @property
-    def extra_state_attributes(self) -> dict[str, str]:
-        """What a card needs to list the device: its name, its energy, its place."""
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """What a card needs to list the device and to say how its cost came to be."""
 
         device = self.device
         return {
@@ -384,6 +471,7 @@ class DeviceCostSensor(CoordinatorEntity[SettlementCoordinator], SensorEntity):
             "statistic": self.statistic,
             "included_in": (device.included_in if device else None) or "",
             "energy_kwh": f"{self.coordinator.device_kwh_total(self.statistic):.3f}",
+            **self.coordinator.device_breakdown(self.statistic),
         }
 
     @property

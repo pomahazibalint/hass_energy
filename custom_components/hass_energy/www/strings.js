@@ -46,6 +46,30 @@ const STRINGS = {
     per_month: "{unit} per month",
     nothing_recorded: "Nothing recorded yet for this statistic.",
     read_error: "Could not read the statistics: {error}",
+    // How a figure came to be, from the figures behind it.
+    how: "How?",
+    behind_energy_cost:
+      "{subsidized_kwh} kWh at the subsidized price and {market_kwh} kWh at the market price, before VAT.",
+    behind_solar_value:
+      "Without the panels the net position would be {without}; it is {position}. {kept} kWh of their production stayed in the house, {exported} kWh was exported.",
+    behind_surplus_value: "{kwh} kWh fed in beyond what netting absorbed, at the feed-in price, outside VAT.",
+    behind_standing_charge: "{months} months at {per_month} a month, before VAT.",
+    behind_vat: "{percent}% on {net_total} of energy and standing charge.",
+    behind_total_payable: "{energy} energy, {standing} standing charge, {vat} VAT.",
+    behind_net_position: "{payable} payable, less {surplus} the supplier owes for surplus.",
+    behind_allowance_remaining: "{used} of {allowance} kWh used; the allowance is {days} days' worth.",
+    behind_period_days: "From {start}; a nominal year to {end} until the meter is read.",
+    behind_consumption:
+      "{energy} kWh. Costed hour by hour at what not consuming would have saved: {parts}. {average} per kWh on average.",
+    behind_device:
+      "{energy} kWh, {share}% of the house. Its share of each hour at what not consuming would have saved: {parts}. {average} per kWh on average.",
+    behind_device_capped: " In {hours} hours the meter claimed more than the house used; capped there.",
+    part_subsidized: "{kwh} kWh at the subsidized price with VAT ({price})",
+    part_market: "{kwh} kWh at the market price with VAT ({price})",
+    part_feed_in: "{kwh} kWh at the feed-in price ({price})",
+    part_mixed: "{kwh} kWh in hours that straddled two prices",
+    parts_joiner: ", ",
+    parts_none: "nothing yet",
   },
   hu: {
     suggestion_title: "Energia elszámolás",
@@ -89,6 +113,29 @@ const STRINGS = {
     per_month: "{unit} havonta",
     nothing_recorded: "Ehhez a statisztikához még nincs rögzített adat.",
     read_error: "Nem sikerült beolvasni a statisztikát: {error}",
+    how: "Hogyan?",
+    behind_energy_cost:
+      "{subsidized_kwh} kWh rezsicsökkentett áron és {market_kwh} kWh piaci áron, ÁFA nélkül.",
+    behind_solar_value:
+      "A napelemek nélkül az egyenleg {without} lenne; így {position}. A termelésükből {kept} kWh maradt a házban, {exported} kWh ment a hálózatba.",
+    behind_surplus_value: "{kwh} kWh a nettósításon felül betáplálva, betáplálási áron, ÁFA-körön kívül.",
+    behind_standing_charge: "{months} hónap, havi {per_month}, ÁFA nélkül.",
+    behind_vat: "{percent}% az energia és az alapdíj {net_total} összegére.",
+    behind_total_payable: "{energy} energia, {standing} alapdíj, {vat} ÁFA.",
+    behind_net_position: "{payable} fizetendő, mínusz {surplus}, amit a szolgáltató a többletért fizet.",
+    behind_allowance_remaining: "{used} / {allowance} kWh felhasználva; a keret {days} napra jár.",
+    behind_period_days: "{start} óta; névlegesen egy év, {end}-ig, amíg a mérőt le nem olvassák.",
+    behind_consumption:
+      "{energy} kWh. Óránként azon az áron, amennyit a nem fogyasztás megtakarított volna: {parts}. Átlagosan {average} kWh-nként.",
+    behind_device:
+      "{energy} kWh, a ház {share}%-a. Minden órában a ráeső rész azon az áron, amennyit a nem fogyasztás megtakarított volna: {parts}. Átlagosan {average} kWh-nként.",
+    behind_device_capped: " {hours} órában a mérő többet mutatott, mint a ház fogyasztása; ott a ház értékére korlátozva.",
+    part_subsidized: "{kwh} kWh rezsicsökkentett áron, ÁFÁ-val ({price})",
+    part_market: "{kwh} kWh piaci áron, ÁFÁ-val ({price})",
+    part_feed_in: "{kwh} kWh betáplálási áron ({price})",
+    part_mixed: "{kwh} kWh két ár közé eső órákban",
+    parts_joiner: ", ",
+    parts_none: "még semmi",
   },
 };
 
@@ -106,4 +153,22 @@ export function t(hass, key, values = {}) {
 export function monthNames(hass) {
   const format = new Intl.DateTimeFormat(languageOf(hass), { month: "short" });
   return Array.from({ length: 12 }, (_, month) => format.format(new Date(2000, month, 1)));
+}
+
+// The sentence behind a cost that was priced hour by hour: the house's or
+// a device's, from the figures the sensor carries.
+export function partsOf(hass, attributes, unit) {
+  const numbers = new Intl.NumberFormat(languageOf(hass), { maximumFractionDigits: 1 });
+  const money = (value) => `${numbers.format(value)} ${unit}`.trim();
+  const parts = [
+    ["part_subsidized", attributes.kwh_at_subsidized, attributes.subsidized_price_with_vat],
+    ["part_market", attributes.kwh_at_market, attributes.market_price_with_vat],
+    ["part_feed_in", attributes.kwh_at_feed_in, attributes.feed_in_price],
+    ["part_mixed", attributes.kwh_mixed, null],
+  ]
+    .filter(([, kwh]) => Number(kwh) > 0.0005)
+    .map(([key, kwh, price]) =>
+      t(hass, key, { kwh: numbers.format(Number(kwh)), price: price === null ? "" : money(Number(price)) })
+    );
+  return parts.length ? parts.join(t(hass, "parts_joiner")) : t(hass, "parts_none");
 }

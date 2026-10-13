@@ -62,7 +62,26 @@ async def async_get_config_entry_diagnostics(
         "consumption_kwh": coordinator.household_consumption_kwh(),
         "solar_kept_kwh": coordinator.household_solar_kept_kwh(),
         "solar_value": coordinator.solar_value_total(),
+        "consumption_cost": coordinator.consumption_cost_total(),
     }
+
+    consumption = coordinator.household_consumption_kwh()
+    devices = []
+    for device in coordinator.sources.devices:
+        first = coordinator.device_since(device.statistic)
+        used = coordinator.device_kwh_total(device.statistic)
+        devices.append(
+            {
+                "statistic": device.statistic,
+                "name": device.name,
+                "included_in": device.included_in,
+                "since": first.isoformat() if first else None,
+                "kwh": used,
+                "share": used / consumption if consumption else None,
+                "cost": coordinator.device_cost_total(device.statistic),
+                "excess_kwh": sum(coordinator.device_excess.get(device.statistic, ())),
+            }
+        )
 
     return {
         # Entity ids are the user's own naming, so they are reported as
@@ -85,6 +104,7 @@ async def async_get_config_entry_diagnostics(
             ),
         },
         "household": household,
+        "devices": devices,
         "period": coordinator.state.as_dict(),
         "observed": observed,
         "days_elapsed": coordinator.days_elapsed(),

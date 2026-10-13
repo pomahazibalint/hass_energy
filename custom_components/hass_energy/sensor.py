@@ -16,8 +16,9 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import UnitOfEnergy
-from homeassistant.core import HomeAssistant
+from homeassistant.const import Platform, UnitOfEnergy
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -25,6 +26,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import SettlementEntry
 from .const import DOMAIN
 from .coordinator import SettlementCoordinator
+from .costs import device_kind
+from .preferences import Device
 from .settings import terms_from_options
 
 KWH = UnitOfEnergy.KILO_WATT_HOUR
@@ -182,6 +185,16 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         available=lambda c: c.solar_value_total() is not None,
         value=lambda c: c.solar_value_total() or 0,
     ),
+    # What consuming cost: what each hour would have saved had nothing been
+    # consumed in it. Marginal, so it does not sum to the invoice.
+    SettlementSensorDescription(
+        key="consumption_cost",
+        translation_key="consumption_cost",
+        state_class=SensorStateClass.TOTAL,
+        monetary=True,
+        available=lambda c: c.consumption_cost_total() is not None,
+        value=lambda c: c.consumption_cost_total() or 0,
+    ),
 )
 
 
@@ -192,6 +205,33 @@ async def async_setup_entry(
     async_add_entities(
         SettlementSensor(coordinator, entry, description) for description in SENSORS
     )
+
+    # The devices come from the energy dashboard's preferences and come and
+    # go with them, so their sensors follow each refresh rather than setup.
+    registry = er.async_get(hass)
+    known: set[str] = set()
+
+    @callback
+    def follow_devices() -> None:
+        wanted = {device.statistic: device for device in coordinator.sources.devices}
+        for statistic in known - wanted.keys():
+            known.discard(statistic)
+            entity_id = registry.async_get_entity_id(
+                Platform.SENSOR, DOMAIN, DeviceCostSensor.unique_id_for(entry, statistic)
+            )
+            if entity_id is not None:
+                registry.async_remove(entity_id)
+        added = [
+            DeviceCostSensor(coordinator, entry, device)
+            for statistic, device in wanted.items()
+            if statistic not in known
+        ]
+        known.update(wanted)
+        if added:
+            async_add_entities(added)
+
+    follow_devices()
+    entry.async_on_unload(coordinator.async_add_listener(follow_devices))
 
 
 class SettlementSensor(CoordinatorEntity[SettlementCoordinator], SensorEntity):
@@ -235,6 +275,74 @@ class SettlementSensor(CoordinatorEntity[SettlementCoordinator], SensorEntity):
             "allowance_kwh": f"{bill.allowance_kwh:.1f}",
             "imported_kwh": f"{bill.readings.imported_kwh:.3f}",
             "exported_kwh": f"{bill.readings.exported_kwh:.3f}",
+        }
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, self.coordinator.entry.entry_id)},
+            name=self.coordinator.entry.title,
+            manufacturer="hass-energy",
+            entry_type=DeviceEntryType.SERVICE,
+        )
+
+
+class DeviceCostSensor(CoordinatorEntity[SettlementCoordinator], SensorEntity):
+    """What one device's consumption cost over the period.
+
+    Its share of each hour's consumption at that hour's cost, so a device
+    that runs at noon on the panels and one that runs at night on the grid
+    are told apart, which is what the dashboard's own device graph cannot
+    do. Named as the dashboard names the device, and following a rename.
+    """
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "device_cost"
+    _attr_state_class = SensorStateClass.TOTAL
+
+    def __init__(
+        self, coordinator: SettlementCoordinator, entry: SettlementEntry, device: Device
+    ) -> None:
+        super().__init__(coordinator)
+        self.statistic = device.statistic
+        self._attr_unique_id = self.unique_id_for(entry, device.statistic)
+        self._attr_native_unit_of_measurement = terms_from_options(entry.options).currency
+        self._attr_translation_placeholders = {"device": device.name}
+
+    @staticmethod
+    def unique_id_for(entry: SettlementEntry, statistic: str) -> str:
+        return f"{entry.entry_id}_{device_kind(Device(statistic, statistic).slug)}"
+
+    @property
+    def device(self) -> Device | None:
+        return self.coordinator.sources.device(self.statistic)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        device = self.device
+        if device is not None:
+            self._attr_translation_placeholders = {"device": device.name}
+        super()._handle_coordinator_update()
+
+    @property
+    def available(self) -> bool:
+        return (
+            super().available
+            and self.device is not None
+            and self.coordinator.device_cost_total(self.statistic) is not None
+        )
+
+    @property
+    def native_value(self) -> int:
+        return self.coordinator.device_cost_total(self.statistic) or 0
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str]:
+        device = self.device
+        return {
+            "statistic": self.statistic,
+            "included_in": (device.included_in if device else None) or "",
+            "energy_kwh": f"{self.coordinator.device_kwh_total(self.statistic):.3f}",
         }
 
     @property

@@ -1,4 +1,4 @@
-"""What the house did with its energy, and what the panels were worth."""
+"""What the house did with its energy, what the panels were worth, and what consuming cost."""
 
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -6,7 +6,10 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from hass_energy.billing import (
+    Bill,
     Flows,
+    Hour,
+    HourCost,
     MeterReadings,
     Prices,
     PriceSchedule,
@@ -15,6 +18,8 @@ from hass_energy.billing import (
     TariffTerms,
     allocate,
     calculate,
+    device_share,
+    marginal,
     solar_value,
 )
 
@@ -23,11 +28,28 @@ UTC = ZoneInfo("UTC")
 PERIOD = SettlementPeriod(date(2025, 3, 1), date(2026, 3, 1))
 SCHEDULE = PriceSchedule([Prices(date(2025, 1, 1), subsidized=30.0, market=60.0, feed_in=5.0)])
 TERMS = TariffTerms()
+VAT = 1.27
 START = datetime(2025, 6, 1, 10, tzinfo=UTC)
 
 
 def flows(*hours: dict[str, float]) -> list[Flows]:
     return [Flows(START + timedelta(hours=i), **hour) for i, hour in enumerate(hours)]
+
+
+def settle(hours: list[Hour], terms: TariffTerms = TERMS) -> tuple[Bill, list[HourCost]]:
+    return allocate(PERIOD, hours, SCHEDULE, terms, standing_charge_months=12, tz=BUDAPEST)
+
+
+def consumption_cost(hours: list[Flows], terms: TariffTerms = TERMS) -> list[float]:
+    return marginal(
+        PERIOD,
+        hours,
+        [hour.without_consumption() for hour in hours],
+        SCHEDULE,
+        terms,
+        standing_charge_months=12,
+        tz=BUDAPEST,
+    )
 
 
 def test_consumption_is_what_entered_less_what_left() -> None:
@@ -81,11 +103,8 @@ def test_the_hourly_values_sum_to_the_bill_without_the_panels() -> None:
         {"imported_kwh": 0.0, "exported_kwh": 3.0, "produced_kwh": 5.0},
         {"imported_kwh": 4.0},
     )
-    kwargs = dict(standing_charge_months=12, tz=BUDAPEST)
-    bill, costs = allocate(PERIOD, series, SCHEDULE, TERMS, **kwargs)
-    bill_without, costs_without = allocate(
-        PERIOD, [hour.without_solar() for hour in series], SCHEDULE, TERMS, **kwargs
-    )
+    bill, costs = settle(list(series))
+    bill_without, costs_without = settle([hour.without_solar() for hour in series])
     hourly = solar_value(costs, costs_without)
 
     assert sum(hourly) == pytest.approx(bill_without.net_position - bill.net_position, abs=1)
@@ -100,13 +119,10 @@ def test_the_panels_are_worth_what_they_saved_under_each_mode() -> None:
     """
 
     series = flows({"imported_kwh": 10.0, "exported_kwh": 4.0, "produced_kwh": 7.0})
-    kwargs = dict(standing_charge_months=12, tz=BUDAPEST)
     for mode in SettlementMode:
         terms = TariffTerms(mode=mode)
-        bill, costs = allocate(PERIOD, series, SCHEDULE, terms, **kwargs)
-        bill_without, costs_without = allocate(
-            PERIOD, [hour.without_solar() for hour in series], SCHEDULE, terms, **kwargs
-        )
+        bill, costs = settle(list(series), terms)
+        bill_without, costs_without = settle([hour.without_solar() for hour in series], terms)
         direct = calculate(
             PERIOD, MeterReadings(13.0, 0.0), SCHEDULE, terms, standing_charge_months=12
         )
@@ -118,19 +134,14 @@ def test_the_panels_are_worth_what_they_saved_under_each_mode() -> None:
 
 def test_no_panels_are_worth_nothing() -> None:
     series = flows({"imported_kwh": 2.0}, {"imported_kwh": 3.0, "exported_kwh": 0.0})
-    kwargs = dict(standing_charge_months=12, tz=BUDAPEST)
-    _, costs = allocate(PERIOD, series, SCHEDULE, TERMS, **kwargs)
-    _, costs_without = allocate(
-        PERIOD, [hour.without_solar() for hour in series], SCHEDULE, TERMS, **kwargs
-    )
+    _, costs = settle(list(series))
+    _, costs_without = settle([hour.without_solar() for hour in series])
 
     assert solar_value(costs, costs_without) == [0.0, 0.0]
 
 
 def test_the_two_allocations_must_cover_the_same_hours() -> None:
-    series = flows({"imported_kwh": 2.0})
-    kwargs = dict(standing_charge_months=12, tz=BUDAPEST)
-    _, costs = allocate(PERIOD, series, SCHEDULE, TERMS, **kwargs)
+    _, costs = settle(list(flows({"imported_kwh": 2.0})))
 
     with pytest.raises(ValueError):
         solar_value(costs, [])
@@ -139,3 +150,109 @@ def test_the_two_allocations_must_cover_the_same_hours() -> None:
 def test_flows_cannot_be_negative() -> None:
     with pytest.raises(ValueError):
         Flows(START, produced_kwh=-1.0)
+
+
+def test_without_consumption_the_grid_share_is_not_imported() -> None:
+    hour = Flows(START, imported_kwh=2.0, produced_kwh=1.0)
+    without = hour.without_consumption()
+
+    assert without.imported_kwh == 0.0
+    assert without.exported_kwh == pytest.approx(1.0)
+
+
+def test_without_consumption_what_was_kept_is_exported_instead() -> None:
+    hour = Flows(START, exported_kwh=1.0, produced_kwh=4.0, discharged_kwh=0.5)
+    without = hour.without_consumption()
+
+    assert without.imported_kwh == 0.0
+    assert without.exported_kwh == pytest.approx(4.5)
+
+
+def test_an_hour_of_shortfall_has_nothing_to_not_consume() -> None:
+    hour = Flows(START, imported_kwh=0.5, exported_kwh=2.0)
+
+    assert hour.without_consumption() == Hour(START, imported_kwh=0.5, exported_kwh=2.0)
+
+
+def test_under_szaldo_a_kwh_consumed_is_worth_the_band_price() -> None:
+    """Whether it came from the grid or the panels: it would have netted."""
+
+    series = flows(
+        {"imported_kwh": 2.0},
+        {"produced_kwh": 2.0},
+    )
+
+    assert consumption_cost(series) == pytest.approx([2 * 30 * VAT, 2 * 30 * VAT])
+
+
+def test_under_szaldo_consumption_in_surplus_is_worth_the_feed_in_price() -> None:
+    """Once the period is in surplus a kWh not consumed is bought at the feed-in price."""
+
+    series = flows(
+        {"exported_kwh": 100.0, "produced_kwh": 100.0},
+        {"produced_kwh": 3.0},
+    )
+
+    assert consumption_cost(series)[1] == pytest.approx(3 * 5.0)
+
+
+def test_under_gross_settlement_the_source_of_a_kwh_decides_its_cost() -> None:
+    series = flows(
+        {"imported_kwh": 2.0},
+        {"produced_kwh": 2.0},
+        {"imported_kwh": 1.0, "produced_kwh": 1.0},
+    )
+
+    costs = consumption_cost(series, TariffTerms(mode=SettlementMode.BRUTTO))
+
+    assert costs == pytest.approx([2 * 30 * VAT, 2 * 5.0, 30 * VAT + 5.0])
+
+
+def test_the_cost_of_an_hour_does_not_move_when_later_hours_arrive() -> None:
+    first = flows({"imported_kwh": 2.0}, {"produced_kwh": 1.0, "imported_kwh": 1.0})
+    later = [*first, Flows(START + timedelta(hours=2), exported_kwh=500.0, produced_kwh=500.0)]
+
+    assert consumption_cost(later)[:2] == consumption_cost(first)
+
+
+def test_the_cost_of_consuming_is_not_negative() -> None:
+    series = flows(
+        {"imported_kwh": 5.0},
+        {"exported_kwh": 3.0, "produced_kwh": 4.0},
+        {"imported_kwh": 0.5, "exported_kwh": 2.0},
+    )
+
+    assert min(consumption_cost(series)) >= 0.0
+    assert consumption_cost(series)[2] == 0.0
+
+
+def test_every_hour_needs_an_alternative_for_the_same_hour() -> None:
+    series = flows({"imported_kwh": 2.0}, {"imported_kwh": 1.0})
+
+    def against(instead: list[Flows]) -> list[float]:
+        return marginal(
+            PERIOD, series, instead, SCHEDULE, TERMS, standing_charge_months=12, tz=BUDAPEST
+        )
+
+    with pytest.raises(ValueError):
+        against(series[:1])
+    with pytest.raises(ValueError):
+        against(list(reversed(series)))
+
+
+def test_a_device_takes_its_share_of_the_hour() -> None:
+    assert device_share(1.0, 4.0) == pytest.approx((0.25, 0.0))
+    assert device_share(0.0, 4.0) == (0.0, 0.0)
+
+
+def test_a_device_cannot_have_used_more_than_the_house() -> None:
+    share, excess = device_share(5.0, 4.0)
+
+    assert share == 1.0
+    assert excess == pytest.approx(1.0)
+    assert device_share(2.0, 0.0) == pytest.approx((0.0, 2.0))
+
+
+def test_a_device_share_cannot_be_negative() -> None:
+    with pytest.raises(ValueError):
+        device_share(-1.0, 4.0)

@@ -133,6 +133,12 @@
       },
       "solar_value": {
         "name": "Solar value"
+      },
+      "consumption_cost": {
+        "name": "Consumption cost"
+      },
+      "device_cost": {
+        "name": "{device} cost"
       }
     }
   },
@@ -207,7 +213,7 @@
     },
     "sources_disagree": {
       "title": "Energy sources disagree in {hours} hours",
-      "description": "In {hours} hours of the settlement period more energy left the house than entered it, {lost_kwh} kWh in all, worst in the hour starting {worst}. That cannot happen, so a source is reporting in the wrong hour: an inverter that lags the grid meter, or a production meter that counts what charged the battery. The energy dashboard reads the same rows and overstates consumption by the same amount. Point the solar source at the inverter's own energy statistic, or exclude battery charging from it."
+      "description": "In {hours} hours of the settlement period the sources describe something that cannot have happened, {lost_kwh} kWh in all, worst in the hour starting {worst}: more energy left the house than entered it, or a device used more than the whole house did. A source is reporting in the wrong hour: an inverter that lags the grid meter, a production meter that counts what charged the battery, or a device meter that reports late. The energy dashboard reads the same rows and overstates consumption by the same amount. Point the solar source at the inverter's own energy statistic, exclude battery charging from it, or check the device's meter."
     }
   }
 }

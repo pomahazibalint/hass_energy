@@ -273,6 +273,24 @@ which is the only way to value them under szaldó. A figure whose sources
 the household lacks is unavailable, and the statistics it would have had
 are removed when the source is dropped.
 
+What consuming cost is a different question from what the bill was, and the
+two are kept apart. The cost statistics reconcile to the invoice; the
+consumption cost is marginal, what each hour would have saved had nothing
+been consumed in it, with the grid's share of the hour not imported and the
+rest exported instead, and every earlier hour as it was. One rule serves
+both settlement modes: under szaldó a kWh not consumed nets whichever way
+it goes, and under gross settlement a grid kWh saves the band price while a
+solar kWh earns only the feed-in price, which is the time-of-day effect of
+a tariff that buys back cheaply. The engine answers it with a second walk
+of the ledger the allocation uses, pricing each hour against an alternative
+for that hour alone. The dashboard's devices, read from the same
+preferences, are each costed at their share of the hour's consumption at
+that price, so a device that runs at noon on the panels and one that runs
+at night on the grid are told apart. Their statistics and sensors come and
+go with the preferences, and a device that claims more than the whole house
+used is capped there and reported through the same repair as the house's
+own disagreement.
+
 Testing needs Home Assistant, so those tests live in `tests/integration` and run
 in the workflow job that installs it. They put hours into the recorder directly
 and run on a frozen clock. The engine's own tests need nothing and run

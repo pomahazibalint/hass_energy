@@ -56,6 +56,10 @@ class Observed:
     #: them has no rows there. Before it the house's flows are unknowable,
     #: not zero, and the other sources are read as nothing.
     household_first: datetime | None = None
+    #: What each device used, one entry per hour alongside ``hours``, zero
+    #: where it has no row. A device says nothing about the house's flows,
+    #: so it neither gates them nor is gated by them.
+    devices: dict[str, list[float]] = field(default_factory=dict)
 
     @property
     def imported_kwh(self) -> float:
@@ -87,13 +91,15 @@ async def async_observe(
     roles: Mapping[str, Sequence[str]],
     start: datetime,
     end: datetime,
+    devices: Sequence[str] = (),
 ) -> Observed:
     """Read hourly flows between two UTC instants, in kWh.
 
     ``roles`` names the statistics feeding each flow; a role with several is
-    summed. ``start`` must be on an hour. The recorder converts units, so a
-    source in Wh or MWh comes back in kWh. An hour without a row is an hour
-    the source did not report, which costs nothing and is not an error.
+    summed. ``devices`` are read alongside, each on its own. ``start`` must
+    be on an hour. The recorder converts units, so a source in Wh or MWh
+    comes back in kWh. An hour without a row is an hour the source did not
+    report, which costs nothing and is not an error.
 
     The household's other sources are taken only where the grid record
     exists and every one of them has begun. An hour the grid meters did not
@@ -103,26 +109,27 @@ async def async_observe(
     """
 
     sources = [source for role in ROLES for source in roles.get(role, ())]
+    wanted = {*sources, *devices}
     instance = get_instance(hass)
     rows = await instance.async_add_executor_job(
         statistics_during_period,
         hass,
         start,
         end,
-        set(sources),
+        wanted,
         "hour",
         {"energy": KWH},
         {"change"},
     )
     metadata = await instance.async_add_executor_job(
-        partial(get_metadata, hass, statistic_ids=set(sources))
+        partial(get_metadata, hass, statistic_ids=wanted)
     )
 
     # A total sensor may fall; the recorder reports that as a negative
     # change, and energy cannot be negative.
     changes = {
         source: {row["start"]: max(row.get("change") or 0.0, 0.0) for row in rows.get(source, [])}
-        for source in sources
+        for source in wanted
     }
     first_of = {
         source: dt_util.utc_from_timestamp(min(per_source))
@@ -152,7 +159,11 @@ async def async_observe(
     return Observed(
         hours=hours,
         first=first,
-        unrecorded=[source for source in sources if source not in metadata],
+        unrecorded=[source for source in (*sources, *devices) if source not in metadata],
         first_of=first_of,
         household_first=household_first,
+        devices={
+            device: [changes[device].get(hour.start.timestamp(), 0.0) for hour in hours]
+            for device in devices
+        },
     )

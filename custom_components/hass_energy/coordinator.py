@@ -16,6 +16,8 @@ them.
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from functools import partial
@@ -33,7 +35,18 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from . import issues
-from .billing import Bill, Flows, HourCost, Prices, SettlementPeriod, allocate, solar_value
+from .billing import (
+    Bill,
+    Flows,
+    HourCost,
+    Prices,
+    SettlementPeriod,
+    allocate,
+    device_share,
+    forint,
+    marginal,
+    solar_value,
+)
 from .const import (
     CONF_EXPORT_ENTITY,
     CONF_IMPORT_ENTITY,
@@ -42,6 +55,7 @@ from .const import (
     STORAGE_VERSION,
 )
 from .costs import (
+    CONSUMPTION_COST,
     EXPORT_COMPENSATION,
     GRID_COST,
     HOUSE_CONSUMPTION,
@@ -50,6 +64,7 @@ from .costs import (
     SOLAR_VALUE,
     Series,
     async_publish,
+    device_kind,
 )
 from .history import Observed, async_observe
 from .preferences import Sources, async_follow, async_sources
@@ -65,30 +80,28 @@ NOMINAL_PERIOD_DAYS = 365
 
 @dataclass(frozen=True)
 class Disagreement:
-    """Hours in which energy left the house without having entered it."""
+    """Hours in which the sources describe something that cannot have happened.
+
+    Energy that left the house without having entered it, or a device that
+    used more than the whole house did. Either is a source reporting in the
+    wrong hour, and the finding is reported rather than smoothed over.
+    """
 
     hours: int = 0
     lost_kwh: float = 0.0
     worst: datetime | None = None
 
     @classmethod
-    def over(cls, flows: list[Flows], since: datetime | None) -> Disagreement:
-        """The finding over the hours the household's sources cover.
+    def over(cls, losses: Mapping[datetime, float]) -> Disagreement:
+        """The finding over the energy each hour lost to the disagreement."""
 
-        Before the first hour they cover, export above import is production
-        nobody recorded, not a source in the wrong hour; with none named at
-        all there is nothing to disagree.
-        """
-
-        if since is None:
-            return cls()
-        failing = [hour for hour in flows if hour.start >= since and hour.shortfall_kwh > 0]
+        failing = {start: lost for start, lost in losses.items() if lost > 0}
         if not failing:
             return cls()
         return cls(
             hours=len(failing),
-            lost_kwh=sum(hour.shortfall_kwh for hour in failing),
-            worst=max(failing, key=lambda hour: hour.shortfall_kwh).start,
+            lost_kwh=sum(failing.values()),
+            worst=max(failing, key=lambda start: failing[start]),
         )
 
 
@@ -158,6 +171,16 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         self.sources = Sources()
         self.bill_without_solar: Bill | None = None
         self.solar_values: list[float] = []
+        #: What each hour's consumption cost, and each device's part of it,
+        #: alongside the observed hours; and what each device claimed above
+        #: the whole house, which is the device's part of the disagreement.
+        self.consumption_costs: list[float] = []
+        self.device_costs: dict[str, list[float]] = {}
+        self.device_excess: dict[str, list[float]] = {}
+        #: Hours carrying the seeded remainder, which are the invoice's
+        #: hours rather than the recorder's and count in no figure of the
+        #: house.
+        self.seeded: set[datetime] = set()
         self.disagreement = Disagreement()
 
     @property
@@ -215,7 +238,8 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         observed = await self._observe()
         self.observed = observed
         issues.source_unrecorded(self.hass, self.entry.entry_id, observed.unrecorded)
-        self.disagreement = Disagreement.over(observed.hours, observed.household_first)
+        self.device_excess = self._device_excess(observed)
+        self.disagreement = Disagreement.over(self._losses(observed))
         issues.sources_disagree(
             self.hass,
             self.entry.entry_id,
@@ -232,16 +256,35 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             )
 
         period = SettlementPeriod(self.state.start, self.period_end())
-        hours, seeded = self._with_unobserved(observed)
+        hours, self.seeded = self._with_unobserved(observed)
+        schedule = schedule_from_options(self.entry.options)
+        terms = terms_from_options(self.entry.options)
+        months = standing_charge_months(self.entry.options)
+        tz = dt_util.get_default_time_zone()
         settle = partial(
-            allocate,
-            period,
-            schedule=schedule_from_options(self.entry.options),
-            terms=terms_from_options(self.entry.options),
-            standing_charge_months=standing_charge_months(self.entry.options),
-            tz=dt_util.get_default_time_zone(),
+            allocate, period, schedule=schedule, terms=terms, standing_charge_months=months, tz=tz
         )
         bill, self.costs = await self.hass.async_add_executor_job(settle, hours)
+
+        # What each hour's consumption cost: what not consuming in that hour
+        # would have saved, with every earlier hour as it was. A device's
+        # cost is its share of the hour at that price. With nothing observed
+        # yet, the one hour settled is the seed's rather than the recorder's,
+        # and no figure of the house is built on it.
+        costs = await self.hass.async_add_executor_job(
+            partial(
+                marginal,
+                period,
+                hours,
+                [hour.without_consumption() for hour in hours],
+                schedule,
+                terms,
+                standing_charge_months=months,
+                tz=tz,
+            )
+        )
+        self.consumption_costs = costs if observed.hours else []
+        self.device_costs = self._device_costs(observed)
 
         # The panels' worth is the bill there would have been without them.
         # Without a production source there is no counterfactual to run.
@@ -266,13 +309,13 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
                 self.entry.entry_id,
                 self.entry.title,
                 self._period_start(),
-                self._series(observed, seeded),
+                self._series(observed),
             )
         except Exception:
             _LOGGER.exception("Could not publish the hourly statistics for %s", self.entry.title)
         return bill
 
-    def _series(self, observed: Observed, seeded: set[datetime]) -> list[Series]:
+    def _series(self, observed: Observed) -> list[Series]:
         """Everything the dashboard can draw, over the hours the recorder saw.
 
         The bill's figures run from the first hour of the grid record. The
@@ -280,12 +323,14 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         cover as well, when any is named: before that the house's flows are
         unknowable, and a figure built on them would be a guess. A household
         with no source beyond the grid has no production to miss, and its
-        consumption is the grid record itself. An hour carrying the seeded
-        remainder is left out whatever the figure: what it holds is the
-        invoice's, not the hour's.
+        consumption is the grid record itself. A device's figures run from
+        its own first hour as well. An hour carrying the seeded remainder is
+        left out whatever the figure: what it holds is the invoice's, not the
+        hour's.
         """
 
         hours = observed.hours
+        seeded = self.seeded
 
         def seen(figures: list[float], since: datetime | None) -> list[tuple[datetime, float]]:
             return [
@@ -297,6 +342,15 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         house_since = self.house_since()
         with_solar = bool(self.sources.production)
         currency = self.hass.config.currency
+        devices = [
+            Series(
+                device_kind(device.slug),
+                currency,
+                seen(self.device_costs[device.statistic], self.device_since(device.statistic)),
+                name=f"{device.name} cost",
+            )
+            for device in self.sources.devices
+        ]
         return [
             Series(GRID_COST, currency, seen([c.grid_cost for c in self.costs], observed.first)),
             Series(
@@ -319,6 +373,8 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
                 currency,
                 seen(self.solar_values, house_since) if with_solar else None,
             ),
+            Series(CONSUMPTION_COST, currency, seen(self.consumption_costs, house_since)),
+            *devices,
         ]
 
     def _period_start(self) -> datetime:
@@ -337,7 +393,66 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             "charged": self.sources.charge,
             "discharged": self.sources.discharge,
         }
-        return await async_observe(self.hass, roles, self._period_start(), end)
+        return await async_observe(
+            self.hass,
+            roles,
+            self._period_start(),
+            end,
+            devices=[device.statistic for device in self.sources.devices],
+        )
+
+    def _device_excess(self, observed: Observed) -> dict[str, list[float]]:
+        """What each device claimed above the whole house, hour by hour.
+
+        Only from the hour the house is known: before it the house's
+        consumption is not a figure a device can be held against.
+        """
+
+        since = self.house_since()
+        return {
+            statistic: [
+                device_share(used, hour.consumption_kwh)[1]
+                if since is not None and hour.start >= since
+                else 0.0
+                for hour, used in zip(observed.hours, kwh, strict=True)
+            ]
+            for statistic, kwh in observed.devices.items()
+        }
+
+    def _device_costs(self, observed: Observed) -> dict[str, list[float]]:
+        """Each device's share of each hour's consumption, at that hour's cost."""
+
+        return {
+            statistic: [
+                device_share(used, hour.consumption_kwh)[0] * cost
+                for hour, used, cost in zip(
+                    observed.hours, kwh, self.consumption_costs, strict=True
+                )
+            ]
+            for statistic, kwh in observed.devices.items()
+        }
+
+    def _losses(self, observed: Observed) -> dict[datetime, float]:
+        """The energy each hour lost to sources that cannot all be right.
+
+        Export above import is a shortfall only once the household's other
+        sources are known: before the first hour they cover it is production
+        nobody recorded, and with none named at all there is nothing to
+        disagree. A device above the house is counted from the hour the
+        house is known.
+        """
+
+        losses: defaultdict[datetime, float] = defaultdict(float)
+        since = observed.household_first
+        if since is not None:
+            for hour in observed.hours:
+                if hour.start >= since and hour.shortfall_kwh > 0:
+                    losses[hour.start] += hour.shortfall_kwh
+        for excess in self.device_excess.values():
+            for hour, lost in zip(observed.hours, excess, strict=True):
+                if lost > 0:
+                    losses[hour.start] += lost
+        return dict(losses)
 
     def _with_unobserved(self, observed: Observed) -> tuple[list[Flows], set[datetime]]:
         """Lay the unobserved remainder over the hours before the record begins.
@@ -392,17 +507,67 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             return None
         return self.observed.household_first if self.sources.ids else self.observed.first
 
+    def device_since(self, statistic: str) -> datetime | None:
+        """The first hour a device's figures can be built on, if any.
+
+        The house's first hour, or the device's own first row when that is
+        later: a device that began recording last month used something
+        unknown before that, not nothing.
+        """
+
+        since = self.house_since()
+        if self.observed is None or since is None or statistic not in self.observed.first_of:
+            return None
+        return max(since, self.observed.first_of[statistic])
+
     def _household_hours(self) -> list[Flows]:
         since = self.house_since()
         if self.observed is None or since is None:
             return []
         return [hour for hour in self.observed.hours if hour.start >= since]
 
+    def _seen(self, figures: Sequence[float], since: datetime | None) -> float:
+        """A figure summed over the hours the house is known and the recorder saw."""
+
+        if self.observed is None or since is None:
+            return 0.0
+        return sum(
+            figure
+            for hour, figure in zip(self.observed.hours, figures, strict=True)
+            if hour.start >= since and hour.start not in self.seeded
+        )
+
     def household_consumption_kwh(self) -> float:
         return sum(hour.consumption_kwh for hour in self._household_hours())
 
     def household_solar_kept_kwh(self) -> float:
         return sum(hour.solar_kept_kwh for hour in self._household_hours())
+
+    def consumption_cost_total(self) -> int | None:
+        """What consuming cost over the period, as the invoice would round it.
+
+        A marginal figure: what each hour would have saved had nothing been
+        consumed in it. It does not sum to the invoice, which the cost
+        statistics reconcile; it says what the things that ran were worth
+        not running.
+        """
+
+        if self.house_since() is None or not self.consumption_costs:
+            return None
+        return forint(self._seen(self.consumption_costs, self.house_since()))
+
+    def device_kwh_total(self, statistic: str) -> float:
+        if self.observed is None or statistic not in self.observed.devices:
+            return 0.0
+        return self._seen(self.observed.devices[statistic], self.device_since(statistic))
+
+    def device_cost_total(self, statistic: str) -> int | None:
+        """What one device's consumption cost over the period."""
+
+        since = self.device_since(statistic)
+        if since is None or statistic not in self.device_costs:
+            return None
+        return forint(self._seen(self.device_costs[statistic], since))
 
     def solar_value_total(self) -> int | None:
         """What the panels have been worth over the period, as the invoice counts.

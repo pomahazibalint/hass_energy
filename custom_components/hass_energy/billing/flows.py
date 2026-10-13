@@ -89,6 +89,45 @@ class Flows(Hour):
         )
 
 
+    def without_consumption(self) -> Hour:
+        """The grid flows this hour would have had with nothing consumed.
+
+        What the house drew from the grid is not imported, and what it took
+        of its own production or battery goes out to the grid instead. The
+        grid's share is what import could cover; the rest came from behind
+        the meter. The difference in the bill is what the hour's consumption
+        cost, and one rule covers both settlement modes: under szaldó a kWh
+        not consumed nets whichever way it goes, and under gross settlement
+        a grid kWh saves the band price while a solar kWh earns the feed-in
+        price, which is the time-of-day effect of a tariff that buys back
+        cheaply.
+        """
+
+        grid = min(self.imported_kwh, self.consumption_kwh)
+        return Hour(
+            self.start,
+            imported_kwh=self.imported_kwh - grid,
+            exported_kwh=self.exported_kwh + self.consumption_kwh - grid,
+        )
+
+
+def device_share(device_kwh: float, consumption_kwh: float) -> tuple[float, float]:
+    """A device's share of an hour's consumption, and what it claims beyond it.
+
+    A device cannot have used more than the house did, so a device meter
+    that says so is reporting in the wrong hour, like an inverter that lags
+    the grid meter. Its share is capped at the whole hour and the excess is
+    returned to be reported, never smoothed over.
+    """
+
+    if device_kwh < 0 or consumption_kwh < 0:
+        raise ValueError("Meter quantities cannot be negative.")
+    excess = max(device_kwh - consumption_kwh, 0.0)
+    if not consumption_kwh:
+        return 0.0, excess
+    return (device_kwh - excess) / consumption_kwh, excess
+
+
 def solar_value(actual: Sequence[HourCost], without: Sequence[HourCost]) -> list[float]:
     """What the panels were worth in each hour.
 

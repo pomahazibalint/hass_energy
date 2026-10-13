@@ -10,6 +10,11 @@ bill after it less the bill before it. The hours sum to the invoice by
 construction, a past hour moves only when the contract is re-valued, and an
 hour in which export cancels earlier import is a negative cost, which is what
 netting means.
+
+The same walk answers a second question that does not reconcile: what an
+hour would have saved had the meters done something else in it. That is a
+marginal measure, chronological like the first, and it is what the cost of
+consuming in a given hour means to the household.
 """
 
 from __future__ import annotations
@@ -54,6 +59,63 @@ class HourCost:
     compensation: int
 
 
+class _Ledger:
+    """The period's quantities so far, by price period, and the bill they make.
+
+    Hours are assigned to price periods by the local day they started on,
+    which is how the invoice draws its boundaries. An hour outside the period
+    is an error: the caller decides the period.
+    """
+
+    def __init__(
+        self,
+        period: SettlementPeriod,
+        schedule: PriceSchedule,
+        terms: TariffTerms,
+        standing_charge_months: int,
+        tz: tzinfo,
+    ) -> None:
+        self._period = period
+        self._schedule = schedule
+        self._terms = terms
+        self._months = standing_charge_months
+        self._tz = tz
+        segments = schedule.segments(period.start, period.end)
+        self._starts = [segment.start for segment in segments]
+        self.imported = [0.0] * len(segments)
+        self.exported = [0.0] * len(segments)
+
+    def index(self, hour: Hour) -> int:
+        day = hour.start.astimezone(self._tz).date()
+        if not self._period.start <= day < self._period.end:
+            raise ValueError(f"The hour starting {hour.start} is outside the period.")
+        return bisect_right(self._starts, day) - 1
+
+    def add(self, hour: Hour) -> None:
+        index = self.index(hour)
+        self.imported[index] += hour.imported_kwh
+        self.exported[index] += hour.exported_kwh
+
+    def bill(self, extra: Hour | None = None) -> Bill:
+        """The bill over everything added so far, plus one hour not yet added."""
+
+        imported = list(self.imported)
+        exported = list(self.exported)
+        if extra is not None:
+            index = self.index(extra)
+            imported[index] += extra.imported_kwh
+            exported[index] += extra.exported_kwh
+        return calculate(
+            self._period,
+            MeterReadings(sum(imported), sum(exported)),
+            self._schedule,
+            self._terms,
+            standing_charge_months=self._months,
+            consumption_by_segment=imported,
+            feed_in_by_segment=exported,
+        )
+
+
 def allocate(
     period: SettlementPeriod,
     hours: Sequence[Hour],
@@ -66,42 +128,15 @@ def allocate(
     """Settle a period hour by hour.
 
     Returns the bill after the last hour and the movement of the bill over
-    each hour, in the order given. Hours are assigned to price periods by the
-    local day they started on, which is how the invoice draws its boundaries.
-    An hour outside the period is an error: the caller decides the period.
+    each hour, in the order given.
     """
 
-    segments = schedule.segments(period.start, period.end)
-    starts = [segment.start for segment in segments]
-    imported = [0.0] * len(segments)
-    exported = [0.0] * len(segments)
-    total_imported = 0.0
-    total_exported = 0.0
-
-    def bill() -> Bill:
-        return calculate(
-            period,
-            MeterReadings(total_imported, total_exported),
-            schedule,
-            terms,
-            standing_charge_months=standing_charge_months,
-            consumption_by_segment=imported,
-            feed_in_by_segment=exported,
-        )
-
-    before = bill()
+    ledger = _Ledger(period, schedule, terms, standing_charge_months, tz)
+    before = ledger.bill()
     costs: list[HourCost] = []
     for hour in hours:
-        day = hour.start.astimezone(tz).date()
-        if not period.start <= day < period.end:
-            raise ValueError(f"The hour starting {hour.start} is outside the period.")
-        index = bisect_right(starts, day) - 1
-        imported[index] += hour.imported_kwh
-        exported[index] += hour.exported_kwh
-        total_imported += hour.imported_kwh
-        total_exported += hour.exported_kwh
-
-        after = bill()
+        ledger.add(hour)
+        after = ledger.bill()
         costs.append(
             HourCost(
                 hour.start,
@@ -112,3 +147,45 @@ def allocate(
         before = after
 
     return before, costs
+
+
+def _position(bill: Bill) -> float:
+    """The energy charge less the surplus, before the surplus is rounded.
+
+    A running figure whose hourly differences are what matter, so the
+    per-line rounding of the invoice would only lose the small hours.
+    """
+
+    return bill.energy_gross - bill.surplus_exact
+
+
+def marginal(
+    period: SettlementPeriod,
+    hours: Sequence[Hour],
+    instead: Sequence[Hour],
+    schedule: PriceSchedule,
+    terms: TariffTerms,
+    *,
+    standing_charge_months: int,
+    tz: tzinfo,
+) -> list[float]:
+    """What each hour cost over what it would have cost had the meters done
+    ``instead`` in that hour alone, with every earlier hour as it was.
+
+    Chronological like ``allocate``: an hour's figure uses only the hours up
+    to it, so a past hour does not move when later hours arrive. Unlike
+    ``allocate`` it does not sum to anything; it answers what each hour was
+    worth not having.
+    """
+
+    if len(hours) != len(instead):
+        raise ValueError("Every hour needs an alternative.")
+    ledger = _Ledger(period, schedule, terms, standing_charge_months, tz)
+    savings: list[float] = []
+    for hour, other in zip(hours, instead, strict=True):
+        if other.start != hour.start:
+            raise ValueError(f"The alternative for {hour.start} is for {other.start}.")
+        without = ledger.bill(other)
+        ledger.add(hour)
+        savings.append(_position(ledger.bill()) - _position(without))
+    return savings

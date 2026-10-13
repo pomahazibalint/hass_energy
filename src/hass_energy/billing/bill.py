@@ -157,6 +157,16 @@ class Bill:
         return sum(line.rounded for line in self.surplus)
 
     @property
+    def surplus_exact(self) -> float:
+        """The surplus before the invoice's per-line rounding.
+
+        For running figures whose hourly differences matter: rounding each
+        line would swallow an hour's few forints of feed-in.
+        """
+
+        return sum(line.net for line in self.surplus)
+
+    @property
     def net_position(self) -> int:
         """Payable less the surplus owed: the household's actual position."""
 

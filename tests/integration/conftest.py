@@ -148,13 +148,15 @@ async def name_sources(
     solar: Sequence[str] = (),
     battery: tuple[str, str] | None = None,
     grid: str | None = None,
+    devices: Sequence[dict[str, Any]] = (),
 ) -> None:
     """Name the household's sources as the energy dashboard's settings would.
 
-    ``battery`` is the charge and discharge statistics, in that order, and
-    ``grid`` the import meter the dashboard's grid source names. Saving the
-    preferences is what the dashboard does, so the integration hears about
-    it the same way.
+    ``battery`` is the charge and discharge statistics, in that order,
+    ``grid`` the import meter the dashboard's grid source names, and
+    ``devices`` the device consumption rows as the preferences hold them.
+    Saving the preferences is what the dashboard does, so the integration
+    hears about it the same way.
     """
 
     sources: list[Any] = [
@@ -184,5 +186,5 @@ async def name_sources(
             {"type": "battery", "stat_energy_from": discharge, "stat_energy_to": charge}
         )
     manager = await async_get_manager(hass)
-    await manager.async_update({"energy_sources": sources})
+    await manager.async_update({"energy_sources": sources, "device_consumption": list(devices)})
     await hass.async_block_till_done()

@@ -63,6 +63,17 @@ it, which is a source reporting in the wrong hour; the native dashboard reads
 the same rows and overstates consumption by the same amount without saying
 so.
 
+What consuming cost is published too, as a **consumption cost** statistic
+and sensor: what each hour would have saved had nothing been consumed in it,
+which is the band price while a kWh would have netted and the feed-in price
+beyond that, and under gross settlement depends on whether the grid or the
+panels supplied it. It is a marginal figure and does not add up to the
+invoice; the grid cost statistic does that. The devices named in the
+dashboard's settings each get a **cost** statistic and sensor, their share
+of each hour's consumption at that hour's cost, named as the dashboard names
+them. A device meter that claims more than the whole house used is capped
+there and reported through the same repair.
+
 ## Quick start
 
 ```sh

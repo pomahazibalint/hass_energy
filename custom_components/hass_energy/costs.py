@@ -40,12 +40,15 @@ EXPORT_COMPENSATION: Final = "export_compensation"
 HOUSE_CONSUMPTION: Final = "house_consumption"
 SELF_CONSUMED_SOLAR: Final = "self_consumed_solar"
 SOLAR_VALUE: Final = "solar_value"
+CONSUMPTION_COST: Final = "consumption_cost"
 #: The statistics the dashboard is pointed at.
 COST_KINDS: Final = (GRID_COST, EXPORT_COMPENSATION)
 #: What the household did, for the dashboard's own cards to draw.
-HOUSEHOLD_KINDS: Final = (HOUSE_CONSUMPTION, SELF_CONSUMED_SOLAR, SOLAR_VALUE)
-#: Written by the invoice import, kept here so removal can find them.
-INVOICE_KINDS: Final = ("imported_energy", "exported_energy", "settlement_cost", "surplus_value")
+HOUSEHOLD_KINDS: Final = (HOUSE_CONSUMPTION, SELF_CONSUMED_SOLAR, SOLAR_VALUE, CONSUMPTION_COST)
+#: One statistic per device the dashboard names, which come and go with the
+#: preferences; what the kind is built from is the device's slug.
+DEVICE_PREFIX: Final = "device_"
+DEVICE_SUFFIX: Final = "_cost"
 
 KWH: Final = "kWh"
 
@@ -68,6 +71,9 @@ class Series:
     kind: str
     unit: str
     rows: Sequence[tuple[datetime, float]] | None
+    #: What the statistic is called in the dashboard's picker, when the kind
+    #: alone does not say: a device's is the device's own name.
+    name: str | None = None
 
     @property
     def unit_class(self) -> str | None:
@@ -82,16 +88,36 @@ def statistic_id(entry_id: str, kind: str) -> str:
     return f"{DOMAIN}:{slugify(entry_id)}_{kind}"
 
 
+def device_kind(slug: str) -> str:
+    return f"{DEVICE_PREFIX}{slug}{DEVICE_SUFFIX}"
+
+
+def _is_device(entry_id: str, stat_id: str) -> bool:
+    return stat_id.startswith(statistic_id(entry_id, DEVICE_PREFIX)) and stat_id.endswith(
+        DEVICE_SUFFIX
+    )
+
+
 def _metadata(entry_id: str, title: str, series: Series) -> StatisticMetaData:
     return StatisticMetaData(
         mean_type=StatisticMeanType.NONE,
         has_sum=True,
         unit_class=series.unit_class,
-        name=f"{title} {series.kind.replace('_', ' ')}",
+        name=f"{title} {series.name or series.kind.replace('_', ' ')}",
         source=DOMAIN,
         statistic_id=statistic_id(entry_id, series.kind),
         unit_of_measurement=series.unit,
     )
+
+
+async def _published(hass: HomeAssistant, entry_id: str) -> set[str]:
+    """Every statistic the recorder holds under this entry's name."""
+
+    known = await get_instance(hass).async_add_executor_job(
+        partial(get_metadata, hass, statistic_source=DOMAIN)
+    )
+    prefix = statistic_id(entry_id, "")
+    return {stat_id for stat_id in known if stat_id.startswith(prefix)}
 
 
 async def async_publish(
@@ -107,14 +133,21 @@ async def async_publish(
     began, so a closed settlement does not break the series. In ordinary
     operation only the latest hour is new; after a price edit or a repaired
     reading, every hour from that point on is rewritten.
+
+    A device statistic the series no longer include is one whose device was
+    dropped from the preferences, and it goes, so the dashboard's picker
+    does not keep offering it.
     """
 
     ids = {one.kind: statistic_id(entry_id, one.kind) for one in series}
     instance = get_instance(hass)
-    known = await instance.async_add_executor_job(
-        partial(get_metadata, hass, statistic_ids=set(ids.values()))
-    )
+    known = await _published(hass, entry_id)
     absent = [ids[one.kind] for one in series if one.rows is None and ids[one.kind] in known]
+    absent += [
+        stat_id
+        for stat_id in sorted(known)
+        if _is_device(entry_id, stat_id) and stat_id not in ids.values()
+    ]
     if absent:
         instance.async_clear_statistics(absent)
         _LOGGER.debug("Removed %s for %s: their sources are gone", absent, entry_id)
@@ -162,10 +195,13 @@ async def async_publish(
 
 
 async def async_remove(hass: HomeAssistant, entry_id: str) -> None:
-    """Drop every statistic a metering point wrote, so none is left to offer."""
+    """Drop every statistic a metering point wrote, so none is left to offer.
 
-    ids = [
-        statistic_id(entry_id, kind)
-        for kind in (*COST_KINDS, *HOUSEHOLD_KINDS, *INVOICE_KINDS)
-    ]
-    get_instance(hass).async_clear_statistics(ids)
+    Whatever the recorder holds under the entry's name, rather than a list of
+    kinds: the device statistics are named after devices this no longer
+    knows about.
+    """
+
+    ids = sorted(await _published(hass, entry_id))
+    if ids:
+        get_instance(hass).async_clear_statistics(ids)

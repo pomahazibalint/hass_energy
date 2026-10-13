@@ -33,7 +33,7 @@ Build a generator-driven Home Assistant energy accounting system with Hungarian 
 - [ ] Diagnostics dashboard
 - [x] Tests
 - [x] GitHub Actions
-- [ ] Release process
+- [x] Release process
 
 ## Current state
 The generator produces seven packages from a configuration: utility meters,

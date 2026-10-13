@@ -377,10 +377,13 @@ force that day: the subsidized price with VAT while the allowance lasts and
 a kWh would net, the market price with VAT once it has run out, the feed-in
 price once the period is in surplus or, under gross settlement, for what the
 panels supplied, and mixed for an hour that straddled two. A device's share
-of each hour goes into the same buckets, so the sentence reads: so many kWh
-at the subsidized price with VAT, so many at the feed-in price, so many in
-between, this much per kWh on average, and how many hours the meter was
-capped at the house's. The invoice's lines are simpler and carry what they
+of each hour goes into the same buckets. The Devices card shows them as
+columns rather than a sentence: each device's energy, its share of the
+house, its energy in the hours worth each price with the price in the
+column head, the average per kWh and the cost, with the rest of the house
+and the house in the same columns, so the table spells out how the totals
+come about without a tap. A column nobody has a figure in is left out. The
+invoice's lines are simpler and carry what they
 always were: energy as subsidized and market kWh with their lines, the
 standing charge as months times the monthly charge, VAT as the rate on the
 net total, the total as its three parts, the net position as the total

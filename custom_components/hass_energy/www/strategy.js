@@ -164,7 +164,9 @@ const statisticsGraph = (title, entities, extra = {}) => ({
   entities,
   stat_types: ["change"],
   chart_type: "bar",
-  period: "day",
+  // The bucket follows the selected range as the native cards' does: hours
+  // for a day, days for a month, months for a year.
+  period: "auto",
   energy_date_selection: true,
   ...extra,
 });

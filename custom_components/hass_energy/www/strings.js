@@ -39,6 +39,15 @@ const STRINGS = {
     device: "Device",
     energy: "Energy",
     cost: "Cost",
+    share: "Share",
+    at_subsidized: "Subsidized",
+    at_market: "Market",
+    at_feed_in: "Feed-in",
+    mixed: "Mixed",
+    average: "Average",
+    capped_note: "capped at the house in {hours} h",
+    columns_note:
+      "Each device's share of each hour at what not consuming in that hour would have saved. The price columns are its energy in the hours worth that price, with VAT; mixed hours straddled two prices.",
     rest_of_house: "Rest of the house",
     house: "House",
     no_devices: "No device is named in the energy dashboard settings, or none has reported yet.",
@@ -58,17 +67,6 @@ const STRINGS = {
     behind_net_position: "{payable} payable, less {surplus} the supplier owes for surplus.",
     behind_allowance_remaining: "{used} of {allowance} kWh used; the allowance is {days} days' worth.",
     behind_period_days: "From {start}; a nominal year to {end} until the meter is read.",
-    behind_consumption:
-      "{energy} kWh. Costed hour by hour at what not consuming would have saved: {parts}. {average} per kWh on average.",
-    behind_device:
-      "{energy} kWh, {share}% of the house. Its share of each hour at what not consuming would have saved: {parts}. {average} per kWh on average.",
-    behind_device_capped: " In {hours} hours the meter claimed more than the house used; capped there.",
-    part_subsidized: "{kwh} kWh at the subsidized price with VAT ({price})",
-    part_market: "{kwh} kWh at the market price with VAT ({price})",
-    part_feed_in: "{kwh} kWh at the feed-in price ({price})",
-    part_mixed: "{kwh} kWh in hours that straddled two prices",
-    parts_joiner: ", ",
-    parts_none: "nothing yet",
   },
   hu: {
     suggestion_title: "Energia elszámolás",
@@ -104,6 +102,15 @@ const STRINGS = {
     device: "Eszköz",
     energy: "Energia",
     cost: "Költség",
+    share: "Arány",
+    at_subsidized: "Rezsicsökkentett",
+    at_market: "Piaci",
+    at_feed_in: "Betáplálási",
+    mixed: "Vegyes",
+    average: "Átlag",
+    capped_note: "{hours} órában a ház értékére korlátozva",
+    columns_note:
+      "Minden eszköz minden órában a ráeső rész azon az áron, amennyit a nem fogyasztás abban az órában megtakarított volna. Az ároszlopok az energiája azokban az órákban, amelyek ennyit értek, ÁFÁ-val; a vegyes órák két ár közé estek.",
     rest_of_house: "A ház többi része",
     house: "Ház",
     no_devices:
@@ -123,17 +130,6 @@ const STRINGS = {
     behind_net_position: "{payable} fizetendő, mínusz {surplus}, amit a szolgáltató a többletért fizet.",
     behind_allowance_remaining: "{used} / {allowance} kWh felhasználva; a keret {days} napra jár.",
     behind_period_days: "{start} óta; névlegesen egy év, {end}-ig, amíg a mérőt le nem olvassák.",
-    behind_consumption:
-      "{energy} kWh. Óránként azon az áron, amennyit a nem fogyasztás megtakarított volna: {parts}. Átlagosan {average} kWh-nként.",
-    behind_device:
-      "{energy} kWh, a ház {share}%-a. Minden órában a ráeső rész azon az áron, amennyit a nem fogyasztás megtakarított volna: {parts}. Átlagosan {average} kWh-nként.",
-    behind_device_capped: " {hours} órában a mérő többet mutatott, mint a ház fogyasztása; ott a ház értékére korlátozva.",
-    part_subsidized: "{kwh} kWh rezsicsökkentett áron, ÁFÁ-val ({price})",
-    part_market: "{kwh} kWh piaci áron, ÁFÁ-val ({price})",
-    part_feed_in: "{kwh} kWh betáplálási áron ({price})",
-    part_mixed: "{kwh} kWh két ár közé eső órákban",
-    parts_joiner: ", ",
-    parts_none: "még semmi",
   },
 };
 
@@ -151,22 +147,4 @@ export function t(hass, key, values = {}) {
 export function monthNames(hass) {
   const format = new Intl.DateTimeFormat(languageOf(hass), { month: "short" });
   return Array.from({ length: 12 }, (_, month) => format.format(new Date(2000, month, 1)));
-}
-
-// The sentence behind a cost that was priced hour by hour: the house's or
-// a device's, from the figures the sensor carries.
-export function partsOf(hass, attributes, unit) {
-  const numbers = new Intl.NumberFormat(languageOf(hass), { maximumFractionDigits: 1 });
-  const money = (value) => `${numbers.format(value)} ${unit}`.trim();
-  const parts = [
-    ["part_subsidized", attributes.kwh_at_subsidized, attributes.subsidized_price_with_vat],
-    ["part_market", attributes.kwh_at_market, attributes.market_price_with_vat],
-    ["part_feed_in", attributes.kwh_at_feed_in, attributes.feed_in_price],
-    ["part_mixed", attributes.kwh_mixed, null],
-  ]
-    .filter(([, kwh]) => Number(kwh) > 0.0005)
-    .map(([key, kwh, price]) =>
-      t(hass, key, { kwh: numbers.format(Number(kwh)), price: price === null ? "" : money(Number(price)) })
-    );
-  return parts.length ? parts.join(t(hass, "parts_joiner")) : t(hass, "parts_none");
 }

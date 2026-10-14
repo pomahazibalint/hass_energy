@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from .terms import allowance_year_starts
+
 
 @dataclass(frozen=True)
 class Prices:
@@ -80,11 +82,13 @@ class PriceSchedule:
         return applicable[-1]
 
     def segments(self, start: date, end: date) -> tuple[Segment, ...]:
-        """Split a period at every price change inside it.
+        """Split a period at every price change inside it, and at 1 August.
 
         A change is a boundary whether or not the numbers actually moved: the
         invoice splits on the price period, and reproducing it means splitting
-        the same way.
+        the same way. The allowance year begins on 1 August and the invoice
+        splits there as well, so each segment falls within one allowance
+        year and the allowance can be applied per side.
         """
 
         if end <= start:
@@ -92,6 +96,8 @@ class PriceSchedule:
 
         boundaries = [start]
         boundaries += [p.valid_from for p in self._prices if start < p.valid_from < end]
+        boundaries += allowance_year_starts(start, end)
+        boundaries = sorted(set(boundaries))
         boundaries.append(end)
 
         return tuple(

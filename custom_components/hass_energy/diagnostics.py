@@ -64,6 +64,11 @@ async def async_get_config_entry_diagnostics(
         "solar_kept_kwh": coordinator.household_solar_kept_kwh(),
         "solar_value": coordinator.solar_value_total(),
         "consumption_cost": coordinator.consumption_cost_total(),
+        "allowance_runs_out_without_panels": (
+            coordinator.outlook_without_solar.runs_out_on.isoformat()
+            if coordinator.outlook_without_solar and coordinator.outlook_without_solar.runs_out_on
+            else None
+        ),
         "net_position_under_gross": (
             coordinator.bill_under_gross.net_position if coordinator.bill_under_gross else None
         ),

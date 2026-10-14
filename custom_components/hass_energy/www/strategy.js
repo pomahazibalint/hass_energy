@@ -321,6 +321,7 @@ function viewsFor(entry, registry, statistics, prefs, hass, index, several) {
         "projected_total_payable",
         "projected_billed_energy",
         "allowance_runs_out",
+        "allowance_runs_out_without_panels",
         "allowance_remaining",
         "period_days",
       ]),

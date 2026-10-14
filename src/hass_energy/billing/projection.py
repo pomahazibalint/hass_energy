@@ -116,17 +116,28 @@ def hours_of(days: Iterable[Day], tz: tzinfo) -> list[Hour]:
     ]
 
 
-def allowance_runs_out(costs: Sequence[HourCost]) -> datetime | None:
-    """When the allowance is gone for good, or None if it never is.
+def allowance_runs_out(
+    costs: Sequence[HourCost], after: datetime | None = None
+) -> datetime | None:
+    """When the allowance next runs out for good, or None if it holds.
 
-    Under szaldó export can restore allowance that earlier import used, so
-    the hour it first reaches zero is not the answer; the hour after the
-    last one with any left is.
+    Per side of 1 August: each side has its own allowance and loses what it
+    does not use, so the question is asked of the first side still open as
+    of ``after`` that is gone by its end. Under szaldó export can restore
+    allowance that earlier import used, so the hour a side first reaches
+    zero is not the answer; the hour after the last one with any left is.
     """
 
-    if not costs or costs[-1].allowance_remaining_kwh > 0:
-        return None
-    for i in range(len(costs) - 1, -1, -1):
-        if costs[i].allowance_remaining_kwh > 0:
-            return costs[i + 1].start
-    return costs[0].start
+    sides: dict[date | None, list[HourCost]] = {}
+    for cost in costs:
+        sides.setdefault(cost.side_end, []).append(cost)
+    for end, hours in sides.items():
+        if after is not None and end is not None and end <= after.date():
+            continue
+        if hours[-1].allowance_remaining_kwh > 0:
+            continue
+        for i in range(len(hours) - 1, -1, -1):
+            if hours[i].allowance_remaining_kwh > 0:
+                return hours[i + 1].start
+        return hours[0].start
+    return None

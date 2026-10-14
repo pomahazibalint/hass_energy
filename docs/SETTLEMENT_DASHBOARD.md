@@ -200,16 +200,44 @@ or to sell, so the figure is the same in either settlement mode: the band
 price with VAT while the allowance would have lasted, the market price
 after. The saving is that less the consumption cost, for the house and for
 each device's share, and the device cost sensors and the consumption cost
-sensor carry both as attributes. The Devices card shows the saving as one
-more column, left out for a household without panels, whose sensors carry
-no such figure. It is one column rather than three: the pure purchase is
-the one baseline that reads in both regimes, and the contract what-if, what
-the period would cost under gross settlement, is a house-wide question that
-one line of the invoice answers. Two caveats, both in the card's note or
-the explanation behind a line: the actual cost is marginal and the savings
-do not sum to the solar value line, which compares two whole bills; and the
-no-panels house eats the allowance sooner, so a late hour's saving can be
-priced at the market rate where the real hour was not.
+sensor carry it as attributes, split into what would have been bought at
+the subsidized price and at the market price, in money and in kWh: the
+hour's purchase cost over its consumption is a price between the two bands
+in force that day, and says how the hour fell between them. The Devices
+card shows these as money columns that sum in two directions: across a
+row, subsidized plus market is the no-panels cost, and the no-panels cost
+less the bill is the saving; down a column, the devices and the rest of the
+house are the house. They replaced the per-price kWh columns and the
+average, which said the same thing less directly. Below the width the
+columns fit at, the share and the two bands give way, by a container query
+on the card's own width, since the dashboard's grid sets it and not the
+screen. A household without panels has none of these figures, and none of
+the columns. The contract what-if, what the period would cost under gross
+settlement, is a house-wide question that one line of the invoice answers.
+Two caveats, in the card's note: the actual cost is marginal and the
+savings do not sum to the solar value line, which compares two whole bills;
+and the no-panels house eats its allowance sooner, so a late hour's saving
+can be priced at the market rate where the real hour was not. When that
+house's allowance would run out is projected the way the real one is, from
+the no-panels hours and last year's no-panels days, and is a sensor beside
+the real date.
+
+The allowance is applied per allowance year. The year begins on 1 August,
+the supplier splits a period there by a dictated or estimated reading, and
+what one year leaves unused does not carry into the next. So a period that
+straddles 1 August has one allowance for each side, that side's days'
+worth, against the energy billed on that side, and the price schedule
+splits its segments there whether or not a price moved, as the invoice
+does. The two rules agree for a household under the allowance on both
+sides or over it on both; they differ for a heavy winter on slack from the
+spring, which the per-side rule bills at the market price while one total
+would not. MVM states the no-carry-over and the split for the allowance in
+general and nothing for a szaldó settlement in particular, so the per-side
+rule is the safe reading rather than a confirmed one. The bill carries its
+sides, the allowance remaining counts a side that has ended as spent, the
+next kWh is priced on today's side, and the run-out date is asked of the
+first side still open: a side gone is not the allowance gone when the next
+side's is still to come.
 
 The net position under gross settlement is the same hours settled gross,
 one more line of the invoice for a szaldó household asking what the switch
@@ -502,7 +530,10 @@ cost sensors gained the device's name as an attribute so the Devices card
 needs no registry lookup.
 
 Savings. Done. What the panels saved on each device and on the house, and
-the period under gross settlement on the invoice. In the same release the
+the period under gross settlement on the invoice; then, in the release
+after, the purchase split into its bands as the table's money columns, the
+allowance per side of 1 August, and when the allowance would run out
+without panels. In the savings release the
 prices were found to have been taken as net when the published figures,
 36.386 and 70.104 Ft/kWh, carry the VAT already, so every energy line had
 been 27% high; the options now say the prices are entered as published and

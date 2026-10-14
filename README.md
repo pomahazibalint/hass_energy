@@ -46,7 +46,10 @@ A wrong meter reading is repaired where Home Assistant repairs any statistic,
 on the Developer tools Statistics page, and the settlement follows. Prices
 are entered as they are published, with VAT in them: 36.386 and 70.104
 Ft/kWh. The settlement bills them net and adds the VAT as the invoice does;
-the feed-in price is outside VAT and is entered as it is.
+the feed-in price is outside VAT and is entered as it is. The subsidized
+allowance is applied per allowance year, which begins on 1 August: a period
+that straddles it has one allowance for each side, apportioned by that
+side's days, and what one side leaves unused does not help the other.
 
 For Home Assistant's energy dashboard, set the grid consumption and return
 sources to **use an entity tracking the total costs** and pick the
@@ -86,8 +89,10 @@ your sources call for them, from Home Assistant's own cards, and then
 **Costs**, the invoice and the outlook beside the costs for the selected
 range: the consumption cost and solar value by day, the house's
 consumption, a table of energy and cost per device over the settlement
-period with the rest of the house and, with panels, what they saved on
-each device, and the device costs by day; and
+period with the rest of the house, which with panels also says what each
+device's energy would have cost bought from the grid at the subsidized and
+the market price and what the panels saved on it, and the device costs by
+day; and
 **History**, each grid meter and the house by
 calendar month, this year over the two before it, and past settlements.
 The date picker floats at the bottom, as in the native dashboard. Tap any line of the
@@ -100,7 +105,9 @@ remaining days follow the same days a year earlier, scaled by how this
 period compares to them, and fall back to the straight line of this period
 where last year is silent. **Projected total payable**, **Projected billed
 energy** and **Allowance runs out** come from settling those days through
-the same engine; the date is unknown when the allowance holds. A **Battery
+the same engine; the date is unknown when the allowance holds. With panels,
+**Allowance runs out without panels** is the same date for the house
+without them. A **Battery
 what-if** in the options, a capacity and a round-trip efficiency, gives a
 **Battery saving under gross settlement** sensor: what a battery the house
 does not have would have saved, priced under gross terms whatever the

@@ -24,6 +24,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from . import SettlementEntry
 from .const import DOMAIN
@@ -97,6 +98,10 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         behind=lambda c: {
             "allowance_kwh": round(c.data.allowance_kwh, 3),
             "allowance_used_kwh": round(c.data.allowance_used_kwh, 3),
+            "remaining_this_side_kwh": round(
+                c.data.allowance_remaining_on(dt_util.now().date()), 3
+            ),
+            "side_ends": (s := c.data.side_on(dt_util.now().date())) and s.end.isoformat(),
             "period_days": c.data.period.days,
         },
     ),
@@ -313,6 +318,14 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         device_class=SensorDeviceClass.DATE,
         available=lambda c: c.outlook is not None,
         value=lambda c: c.outlook.runs_out_on if c.outlook else None,
+    ),
+    # The same for the house with no panels: what they are holding off.
+    SettlementSensorDescription(
+        key="allowance_runs_out_without_panels",
+        translation_key="allowance_runs_out_without_panels",
+        device_class=SensorDeviceClass.DATE,
+        available=lambda c: c.outlook_without_solar is not None,
+        value=lambda c: c.outlook_without_solar.runs_out_on if c.outlook_without_solar else None,
     ),
     # What a battery would have saved, under gross settlement whatever the
     # entry's mode: under szaldó annual netting is a free battery.

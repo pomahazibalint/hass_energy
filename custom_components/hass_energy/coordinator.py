@@ -192,11 +192,12 @@ def _outlook(
     hours: Sequence[Hour],
     projected: Sequence[Day],
     days_from_last_year: int,
+    now: datetime,
 ) -> Outlook:
     """Settle the hours so far and the days still to come as one period."""
 
     bill, costs = contract.allocate([*hours, *hours_of(projected, contract.tz)])
-    return Outlook(bill, allowance_runs_out(costs), len(projected), days_from_last_year)
+    return Outlook(bill, allowance_runs_out(costs, now), len(projected), days_from_last_year)
 
 
 def _under_gross(
@@ -296,7 +297,13 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         #: saved is the difference. Empty without a production source, when
         #: there is nothing to have saved.
         self.purchase_costs: list[float] = []
-        self.device_purchases: dict[str, list[float]] = {}
+        #: Of each hour's consumption bought from the grid with no panels,
+        #: the kWh that would have been at the market price, the allowance
+        #: of that world being gone, and what they would have cost.
+        self.purchase_market_kwh: list[float] = []
+        self.purchase_market_costs: list[float] = []
+        #: Each device's share of each hour's consumption.
+        self.device_shares: dict[str, list[float]] = {}
         self.device_excess: dict[str, list[float]] = {}
         #: Hours carrying the seeded remainder, which are the invoice's
         #: hours rather than the recorder's and count in no figure of the
@@ -305,6 +312,9 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         self.disagreement = Disagreement()
         #: Where the period is heading, and what a battery would have saved.
         self.outlook: Outlook | None = None
+        #: Where the period would be heading with no panels, for when the
+        #: allowance would run out without them.
+        self.outlook_without_solar: Outlook | None = None
         self.battery_saving: int | None = None
         #: The same hours settled under gross settlement, for a szaldó
         #: household asking what the switch would mean; None under gross
@@ -410,19 +420,24 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             contract.marginal, hours, [hour.without_consumption() for hour in hours]
         )
         self.consumption_costs = costs if observed.hours else []
-        self.device_costs = self._device_costs(observed, self.consumption_costs)
+        self.device_shares = self._device_shares(observed)
+        self.device_costs = self._shared_out(self.consumption_costs)
         # What the same consumption would have cost bought from the grid:
-        # the no-panels hours costed against nothing consumed in them. Only
-        # with panels; without them it is the consumption cost itself.
+        # the no-panels hours costed against nothing consumed in them, and
+        # how much of it at the market price, the no-panels allowance being
+        # gone. Only with panels; without them it is the consumption cost.
         if self.sources.production and observed.hours:
             self.purchase_costs = await self.hass.async_add_executor_job(
                 contract.marginal,
                 [hour.without_solar() for hour in hours],
                 [hour.without_solar_or_consumption() for hour in hours],
             )
+            self.purchase_market_kwh, self.purchase_market_costs = self._purchase_bands(
+                observed, contract
+            )
         else:
             self.purchase_costs = []
-        self.device_purchases = self._device_costs(observed, self.purchase_costs)
+            self.purchase_market_kwh, self.purchase_market_costs = [], []
         # What price each hour's consumption was worth: the ingredient a
         # figure explains itself with, so many kWh at this price.
         self.rates = (
@@ -437,15 +452,6 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             else []
         )
 
-        self.outlook = await self._project(contract, hours, bill, observed)
-        battery = battery_from_options(self.entry.options)
-        under_gross, self.battery_saving = await self.hass.async_add_executor_job(
-            _under_gross, contract, hours, battery
-        )
-        self.bill_under_gross = (
-            under_gross if contract.terms.mode is SettlementMode.SZALDO else None
-        )
-
         # The panels' worth is the bill there would have been without them.
         # Without a production source there is no counterfactual to run.
         if self.sources.production:
@@ -456,6 +462,22 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         else:
             self.bill_without_solar = None
             self.solar_values = []
+
+        self.outlook = await self._project(contract, hours, bill, observed)
+        self.outlook_without_solar = (
+            await self._project(
+                contract, hours, self.bill_without_solar, observed, without_solar=True
+            )
+            if self.bill_without_solar is not None
+            else None
+        )
+        battery = battery_from_options(self.entry.options)
+        under_gross, self.battery_saving = await self.hass.async_add_executor_job(
+            _under_gross, contract, hours, battery
+        )
+        self.bill_under_gross = (
+            under_gross if contract.terms.mode is SettlementMode.SZALDO else None
+        )
 
         # Only hours the recorder saw are published. The seeded remainder is
         # in the bill, and in the netting position every later hour is costed
@@ -557,7 +579,13 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         )
 
     async def _project(
-        self, contract: Contract, hours: Sequence[Hour], bill: Bill, observed: Observed
+        self,
+        contract: Contract,
+        hours: Sequence[Flows],
+        bill: Bill,
+        observed: Observed,
+        *,
+        without_solar: bool = False,
     ) -> Outlook:
         """Where the period is heading.
 
@@ -565,15 +593,23 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         by this period's complete days against theirs, and the straight
         line of this period wherever last year is silent. The rate is the
         bill's readings over the days elapsed, so a seeded remainder counts
-        in it; the shape is only what the recorder saw.
+        in it; the shape is only what the recorder saw. With ``without_solar``
+        the same for the house with no panels, from the no-panels hours and
+        last year's no-panels days, for when the allowance would run out.
         """
 
         now = dt_util.now()
         today = now.date()
         period = contract.period
         last_year = await async_observe_days(
-            self.hass, self._grid_roles(), a_year_before(period.start), a_year_before(period.end)
+            self.hass,
+            {**self._grid_roles(), "produced": self.sources.production},
+            a_year_before(period.start),
+            a_year_before(period.end),
+            without_solar=without_solar,
         )
+        if without_solar:
+            hours = [hour.without_solar() for hour in hours]
 
         so_far: dict[date, Day] = {}
         for hour in observed.hours:
@@ -582,11 +618,12 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             day = dt_util.as_local(hour.start).date()
             if day >= today:
                 break
+            flows = hour.without_solar() if without_solar else hour
             before = so_far.get(day, Day(day))
             so_far[day] = Day(
                 day,
-                before.imported_kwh + hour.imported_kwh,
-                before.exported_kwh + hour.exported_kwh,
+                before.imported_kwh + flows.imported_kwh,
+                before.exported_kwh + flows.exported_kwh,
             )
 
         elapsed = max(self.days_elapsed(today), 1)
@@ -600,7 +637,7 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         projected = project(remaining, so_far, last_year, rate)
         from_last_year = sum(a_year_before(day) in last_year for day, _ in remaining)
         return await self.hass.async_add_executor_job(
-            _outlook, contract, hours, projected, from_last_year
+            _outlook, contract, hours, projected, from_last_year, now
         )
 
     def _grid_roles(self) -> dict[str, tuple[str, ...]]:
@@ -627,23 +664,57 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             for statistic, kwh in observed.devices.items()
         }
 
-    def _device_costs(
-        self, observed: Observed, costs: Sequence[float]
-    ) -> dict[str, list[float]]:
-        """Each device's share of each hour's consumption, at that hour's cost.
+    def _device_shares(self, observed: Observed) -> dict[str, list[float]]:
+        """Each device's share of each hour's consumption."""
 
-        Empty when the costs are, which is a figure nobody has.
-        """
-
-        if not costs:
-            return {}
         return {
             statistic: [
-                device_share(used, hour.consumption_kwh)[0] * cost
-                for hour, used, cost in zip(observed.hours, kwh, costs, strict=True)
+                device_share(used, hour.consumption_kwh)[0]
+                for hour, used in zip(observed.hours, kwh, strict=True)
             ]
             for statistic, kwh in observed.devices.items()
         }
+
+    def _shared_out(self, figures: Sequence[float]) -> dict[str, list[float]]:
+        """Each device's share of an hourly figure of the house.
+
+        Empty when the figure is, which is a figure nobody has.
+        """
+
+        if not figures:
+            return {}
+        return {
+            statistic: [
+                share * figure for share, figure in zip(shares, figures, strict=True)
+            ]
+            for statistic, shares in self.device_shares.items()
+        }
+
+    def _purchase_bands(
+        self, observed: Observed, contract: Contract
+    ) -> tuple[list[float], list[float]]:
+        """Of each hour bought from the grid, the kWh at the market price and their cost.
+
+        The hour's purchase cost over its consumption is a price between the
+        two bands in force that day, both with VAT, and says how the hour
+        split between them: all subsidized while the no-panels allowance
+        lasts, all market once it is gone, and the hour it goes in between.
+        """
+
+        with_vat = 1 + contract.terms.vat_percent / 100
+        market_kwh: list[float] = []
+        market_costs: list[float] = []
+        for hour, cost in zip(observed.hours, self.purchase_costs, strict=True):
+            prices = contract.schedule.at(hour.start.astimezone(contract.tz).date())
+            low = prices.subsidized * with_vat
+            high = prices.market * with_vat
+            kwh = hour.consumption_kwh
+            at_market = 0.0
+            if kwh > 0 and high > low:
+                at_market = min(max((cost - kwh * low) / (high - low), 0.0), kwh)
+            market_kwh.append(at_market)
+            market_costs.append(at_market * high)
+        return market_kwh, market_costs
 
     def disagreement_detail(self, limit: int = 24) -> list[dict[str, Any]]:
         """The worst hours of the disagreement, with what every source had.
@@ -849,23 +920,43 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         return {
             **self.breakdown([hour.consumption_kwh for hour in self.observed.hours], since),
             "average_per_kwh": round(cost / used, 2) if used else 0.0,
-            **self.saved_by_panels(self.purchase_costs, self.consumption_costs, since),
+            **self.panels_breakdown(None, since),
             **self.prices_with_vat(),
         }
 
-    def saved_by_panels(
-        self, purchases: Sequence[float], costs: Sequence[float], since: datetime | None
-    ) -> dict[str, int]:
-        """What the panels saved on a cost: what it would have been bought from
-        the grid, less what it was. Nothing without panels, when there is no
-        figure rather than a zero."""
+    def panels_breakdown(
+        self, shares: Sequence[float] | None, since: datetime | None
+    ) -> dict[str, float | int]:
+        """What the panels saved on a cost, and what buying would have been.
 
-        if not purchases:
+        What the consumption would have cost bought from the grid with no
+        panels, how much of that at each band and how many kWh, and the
+        saving, which is that less what it cost. For the house as it is;
+        for a device, its shares of each hour. Nothing without panels, when
+        there is no figure rather than a zero.
+        """
+
+        if not self.purchase_costs or self.observed is None or since is None:
             return {}
-        bought = forint(self._seen(purchases, since))
+        hours = self.observed.hours
+        weight = shares if shares is not None else [1.0] * len(hours)
+
+        def total(figures: Sequence[float]) -> float:
+            return self._seen(
+                [w * figure for w, figure in zip(weight, figures, strict=True)], since
+            )
+
+        bought = forint(total(self.purchase_costs))
+        at_market = forint(total(self.purchase_market_costs))
+        market_kwh = total(self.purchase_market_kwh)
+        kwh = total([hour.consumption_kwh for hour in hours])
         return {
             "cost_without_panels": bought,
-            "saved_by_panels": bought - forint(self._seen(costs, since)),
+            "saved_by_panels": bought - forint(total(self.consumption_costs)),
+            "bought_at_subsidized": bought - at_market,
+            "bought_at_market": at_market,
+            "kwh_bought_at_subsidized": round(kwh - market_kwh, 3),
+            "kwh_bought_at_market": round(market_kwh, 3),
         }
 
     def device_breakdown(self, statistic: str) -> dict[str, float | int]:
@@ -889,11 +980,7 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             "share_of_house": round(energy / house, 4) if house else 0.0,
             "capped_hours": sum(1 for lost in excess if lost > 0),
             "excess_kwh": round(sum(excess), 3),
-            **self.saved_by_panels(
-                self.device_purchases.get(statistic, []),
-                self.device_costs.get(statistic, []),
-                since,
-            ),
+            **self.panels_breakdown(self.device_shares.get(statistic), since),
             **self.prices_with_vat(),
         }
 
@@ -981,7 +1068,8 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         prices = self._prices_today(today)
         with_vat = 1 + terms_from_options(self.entry.options).vat_percent / 100
         bill = self.data
-        if bill is not None and bill.allowance_remaining_kwh <= 0:
+        day = today or dt_util.now().date()
+        if bill is not None and bill.allowance_remaining_on(day) <= 0:
             return round(prices.market * with_vat, 3)
         return round(prices.subsidized * with_vat, 3)
 

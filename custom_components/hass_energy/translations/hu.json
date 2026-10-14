@@ -164,6 +164,9 @@
       "allowance_runs_out": {
         "name": "A keret kimerülésének napja"
       },
+      "allowance_runs_out_without_panels": {
+        "name": "A keret kimerülésének napja napelemek nélkül"
+      },
       "battery_saving": {
         "name": "Akkumulátor megtakarítása bruttó elszámolással"
       }

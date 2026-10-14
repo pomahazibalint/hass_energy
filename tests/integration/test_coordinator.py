@@ -180,7 +180,10 @@ async def test_the_marginal_price_follows_the_allowance_basis(
     await hass.async_block_till_done()
 
     assert coordinator(entry).current_unit_price() == 80.0
-    assert coordinator(entry).data.allowance_remaining_kwh == 0
+    bill = coordinator(entry).data
+    # This side of 1 August is spent; the side after it still holds its own.
+    assert bill.allowance_remaining_on(TODAY) == 0
+    assert bill.allowance_remaining_kwh == pytest.approx(2523 * 71 / 365)
 
 
 async def test_a_backdated_price_applies_to_the_hours_after_its_date(

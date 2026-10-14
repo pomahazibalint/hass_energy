@@ -21,6 +21,8 @@ from hass_energy.billing import (
 
 BUDAPEST = ZoneInfo("Europe/Budapest")
 PERIOD = SettlementPeriod(date(2025, 3, 1), date(2026, 3, 1))
+#: A period within one allowance year, for what needs no 1 August inside it.
+ALLOWANCE_YEAR = SettlementPeriod(date(2025, 8, 1), date(2026, 8, 1))
 SCHEDULE = PriceSchedule([Prices(date(2025, 1, 1), subsidized=30.0, market=60.0, feed_in=5.0)])
 RATE = Day(date(2025, 6, 10), imported_kwh=10.0, exported_kwh=2.0)
 
@@ -104,18 +106,47 @@ def test_the_allowance_runs_out_when_it_is_gone_for_good() -> None:
     terms = TariffTerms(annual_allowance_kwh=365.0)
     hours = hours_of(
         [
+            Day(date(2025, 8, 1), imported_kwh=400.0),
+            Day(date(2025, 8, 2), exported_kwh=100.0),
+            Day(date(2025, 8, 3), imported_kwh=200.0),
+            Day(date(2025, 8, 4), imported_kwh=10.0),
+        ],
+        BUDAPEST,
+    )
+    _, costs = allocate(
+        ALLOWANCE_YEAR, hours, SCHEDULE, terms, standing_charge_months=12, tz=BUDAPEST
+    )
+
+    assert costs[0].allowance_remaining_kwh == 0.0
+    assert costs[1].allowance_remaining_kwh == pytest.approx(65.0)
+    assert allowance_runs_out(costs) == hours[2].start
+
+
+def test_the_allowance_of_the_side_still_to_come_holds_until_it_is_spent() -> None:
+    """A period straddling 1 August: the spring's side gone is not the allowance gone."""
+
+    terms = TariffTerms(annual_allowance_kwh=365.0)
+    hours = hours_of(
+        [
             Day(date(2025, 3, 1), imported_kwh=400.0),
-            Day(date(2025, 3, 2), exported_kwh=100.0),
-            Day(date(2025, 3, 3), imported_kwh=200.0),
-            Day(date(2025, 3, 4), imported_kwh=10.0),
+            Day(date(2025, 8, 1), imported_kwh=100.0),
+            Day(date(2025, 8, 2), imported_kwh=200.0),
         ],
         BUDAPEST,
     )
     _, costs = allocate(PERIOD, hours, SCHEDULE, terms, standing_charge_months=12, tz=BUDAPEST)
 
+    # 153 days of allowance spent on day one, so the spring's side is gone
+    # from its first hour; the 212 after 1 August are the next side's.
     assert costs[0].allowance_remaining_kwh == 0.0
-    assert costs[1].allowance_remaining_kwh == pytest.approx(65.0)
-    assert allowance_runs_out(costs) == hours[2].start
+    assert costs[0].side_end == date(2025, 8, 1)
+    assert costs[1].allowance_remaining_kwh == pytest.approx(112.0)
+    assert costs[2].allowance_remaining_kwh == 0.0
+    assert allowance_runs_out(costs) == hours[0].start
+    # Asked after 1 August, the spring no longer counts: the winter's side
+    # runs out on its second day.
+    assert allowance_runs_out(costs, after=hours[1].start) == hours[2].start
+    assert allowance_runs_out(costs[:2], after=hours[1].start) is None
 
 
 def test_an_allowance_that_holds_runs_out_never() -> None:

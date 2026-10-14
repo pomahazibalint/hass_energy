@@ -76,7 +76,11 @@ async def test_seeded_energy_is_spread_across_the_prices_it_spanned(
     await seed(hass, date(2025, 1, 1), 1000.0)
 
     lines = coordinator(entry).data.subsidized
-    assert [line.unit_price for line in lines] == pytest.approx([36.386 / 1.27, 40.0 / 1.27])
+    # One line per price period and per allowance year: to the price change
+    # on 1 August 2025, to the next 1 August, and since.
+    assert [line.unit_price for line in lines] == pytest.approx(
+        [36.386 / 1.27, 40.0 / 1.27, 40.0 / 1.27]
+    )
     assert sum(line.kwh for line in lines) == pytest.approx(1000.0)
     # Spread over the days from 1 January 2025 to today, 212 of which fell
     # before the price changed on 1 August.

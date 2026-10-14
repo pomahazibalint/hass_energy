@@ -13,17 +13,18 @@ invoice with an ordinary test.
 
 from __future__ import annotations
 
-from .bill import Bill, Line, MeterReadings, SettlementPeriod, SurplusLine, forint
+from .bill import AllowanceSide, Bill, Line, MeterReadings, SettlementPeriod, SurplusLine, forint
 from .engine import calculate
 from .flows import Flows, device_share, solar_value, with_battery
 from .prices import Prices, PriceSchedule, Segment
 from .projection import Day, a_year_before, allowance_runs_out, hours_of, project
 from .rates import Rate, rate_of, rates
 from .series import Hour, HourCost, allocate, marginal, settle
-from .terms import AllowanceBasis, SettlementMode, TariffTerms
+from .terms import AllowanceBasis, SettlementMode, TariffTerms, allowance_year_starts
 
 __all__ = [
     "AllowanceBasis",
+    "AllowanceSide",
     "Bill",
     "Day",
     "Flows",
@@ -42,6 +43,7 @@ __all__ = [
     "a_year_before",
     "allocate",
     "allowance_runs_out",
+    "allowance_year_starts",
     "calculate",
     "device_share",
     "forint",

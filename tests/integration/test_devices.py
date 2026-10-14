@@ -4,7 +4,7 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
-from custom_components.hass_energy.const import CONF_MODE, DOMAIN
+from custom_components.hass_energy.const import CONF_ALLOWANCE_KWH, CONF_MODE, DOMAIN
 from custom_components.hass_energy.costs import CONSUMPTION_COST, device_kind, statistic_id
 from custom_components.hass_energy.diagnostics import async_get_config_entry_diagnostics
 from custom_components.hass_energy.preferences import Device
@@ -19,6 +19,7 @@ from .conftest import (
     EXPORT_ENTITY,
     IMPORT_ENTITY,
     PRODUCTION_ENTITY,
+    TODAY,
     coordinator,
     name_sources,
     record,
@@ -30,8 +31,9 @@ from .test_sensor import PREFIX, state_of
 
 WASHER = "sensor.washer_energy"
 HEAT_PUMP = "sensor.heat_pump_energy"
-#: The subsidized price in force on the test's day, from the fixture schedule.
+#: The subsidized and market prices in force on the test's day, from the fixture schedule.
 BAND = 40.0
+MARKET = 80.0
 FEED_IN = 6.0
 
 
@@ -356,11 +358,53 @@ async def test_a_devices_cost_carries_the_figures_it_was_made_of(
     assert house.attributes["kwh_at_feed_in"] == pytest.approx(2.0)
 
     # Bought from the grid, every kWh would have cost the band price: the
-    # panels saved the difference, on the device and on the house.
+    # panels saved the difference, on the device and on the house, and all
+    # of it within the allowance.
     assert attributes["cost_without_panels"] == round(3 * BAND)
     assert attributes["saved_by_panels"] == round(3 * BAND) - round(2 * BAND + FEED_IN)
+    assert attributes["bought_at_subsidized"] == round(3 * BAND)
+    assert attributes["bought_at_market"] == 0
+    assert attributes["kwh_bought_at_subsidized"] == pytest.approx(3.0)
+    assert attributes["kwh_bought_at_market"] == 0.0
     assert house.attributes["cost_without_panels"] == round(6 * BAND)
     assert house.attributes["saved_by_panels"] == round(6 * BAND) - round(4 * BAND + 2 * FEED_IN)
+    assert house.attributes["bought_at_subsidized"] == round(6 * BAND)
+    assert house.attributes["kwh_bought_at_subsidized"] == pytest.approx(6.0)
+
+
+async def test_bought_from_the_grid_the_market_band_follows_the_allowance(
+    entry: MockConfigEntry, hass: HomeAssistant
+) -> None:
+    """With no allowance, every kWh bought would be at the market price, and
+    the no-panels allowance is gone from the first hour."""
+
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, CONF_ALLOWANCE_KWH: 0.0}
+    )
+    await hass.async_block_till_done()
+    await name_sources(hass, solar=[PRODUCTION_ENTITY], devices=[device(WASHER, name="Washer")])
+    await record(hass, IMPORT_ENTITY, DAY_START, [4.0, 0.0])
+    await record(hass, PRODUCTION_ENTITY, DAY_START, [0.0, 2.0])
+    await record(hass, WASHER, DAY_START, [2.0, 1.0])
+    await refresh(hass, entry)
+
+    washer = hass.states.get(PREFIX + "washer_cost")
+    assert washer is not None
+    assert washer.attributes["kwh_bought_at_market"] == pytest.approx(3.0)
+    assert washer.attributes["kwh_bought_at_subsidized"] == 0.0
+    assert washer.attributes["bought_at_market"] == round(3 * MARKET)
+    assert washer.attributes["bought_at_subsidized"] == 0
+    assert washer.attributes["cost_without_panels"] == round(3 * MARKET)
+    assert state_of(hass, "allowance_runs_out_without_panels") == TODAY.isoformat()
+
+
+async def test_without_panels_the_allowance_runs_out_without_them_is_unavailable(
+    entry: MockConfigEntry, hass: HomeAssistant
+) -> None:
+    await record(hass, IMPORT_ENTITY, DAY_START, [4.0])
+    await refresh(hass, entry)
+
+    assert state_of(hass, "allowance_runs_out_without_panels") == STATE_UNAVAILABLE
 
 
 async def test_without_panels_there_is_no_saving_to_report(

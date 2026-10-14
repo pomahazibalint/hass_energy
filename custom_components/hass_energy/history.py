@@ -196,7 +196,12 @@ async def async_observe(
 
 
 async def async_observe_days(
-    hass: HomeAssistant, roles: Mapping[str, Sequence[str]], start: date, end: date
+    hass: HomeAssistant,
+    roles: Mapping[str, Sequence[str]],
+    start: date,
+    end: date,
+    *,
+    without_solar: bool = False,
 ) -> dict[date, Day]:
     """Read what the grid meters did per local day between two dates, in kWh.
 
@@ -204,9 +209,15 @@ async def async_observe_days(
     recorder already holds as statistics, reduced to days the way the
     dashboard's own day view reduces them. A day without a row is absent,
     not zero, because the projection has to know the difference.
+
+    ``without_solar`` reads the production as well and returns the grid day
+    there would have been with no panels, the day's flows as the hour's
+    counterfactual treats them: what the panels supplied comes from the
+    grid, and only export they could not have supplied remains.
     """
 
-    sources = [source for role in GRID_ROLES for source in roles.get(role, ())]
+    read = [*GRID_ROLES, "produced"] if without_solar else list(GRID_ROLES)
+    sources = [source for role in read for source in roles.get(role, ())]
     rows = await get_instance(hass).async_add_executor_job(
         statistics_during_period,
         hass,
@@ -218,13 +229,19 @@ async def async_observe_days(
         {"change"},
     )
     totals: dict[date, dict[str, float]] = {}
-    for role in GRID_ROLES:
+    for role in read:
         for source in roles.get(role, ()):
             for row in rows.get(source, []):
                 day = dt_util.as_local(dt_util.utc_from_timestamp(row["start"])).date()
                 per_role = totals.setdefault(day, {})
                 per_role[role] = per_role.get(role, 0.0) + max(row.get("change") or 0.0, 0.0)
-    return {
-        day: Day(day, per_role.get("imported", 0.0), per_role.get("exported", 0.0))
-        for day, per_role in sorted(totals.items())
-    }
+    days = {}
+    for day, per_role in sorted(totals.items()):
+        imported = per_role.get("imported", 0.0)
+        exported = per_role.get("exported", 0.0)
+        if without_solar:
+            produced = per_role.get("produced", 0.0)
+            imported += max(produced - exported, 0.0)
+            exported = max(exported - produced, 0.0)
+        days[day] = Day(day, imported, exported)
+    return days

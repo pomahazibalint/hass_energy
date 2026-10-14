@@ -54,6 +54,25 @@ class MeterReadings:
 
 
 @dataclass(frozen=True)
+class AllowanceSide:
+    """One allowance year's part of the period, and what used its allowance.
+
+    The allowance is apportioned by day within the side, and what the side
+    leaves unused is lost when it ends: the supplier does not carry it into
+    the next allowance year.
+    """
+
+    start: date
+    end: date
+    allowance_kwh: float
+    used_kwh: float
+
+    @property
+    def remaining_kwh(self) -> float:
+        return max(self.allowance_kwh - self.used_kwh, 0.0)
+
+
+@dataclass(frozen=True)
 class Line:
     """One priced quantity over one price period, as an invoice states it."""
 
@@ -96,6 +115,11 @@ class Bill:
     #: What has eaten into the allowance: the subsidized energy, plus under the
     #: gross basis the withdrawal that netting removed before billing.
     allowance_used_kwh: float = 0.0
+    #: The allowance by allowance year, for a period that straddles 1 August.
+    sides: tuple[AllowanceSide, ...] = field(default_factory=tuple)
+    #: The day the bill is as of: a side that has ended by then has lost what
+    #: it did not use. None is a bill over the whole period at once.
+    as_of: date | None = None
     subsidized: tuple[Line, ...] = field(default_factory=tuple)
     market: tuple[Line, ...] = field(default_factory=tuple)
     standing_charge_months: int = 0
@@ -118,10 +142,35 @@ class Bill:
 
         Not simply the allowance less the subsidized lines: under the gross
         basis a household can have exhausted the allowance on withdrawal while
-        its netted consumption is still small.
+        its netted consumption is still small. Per side: what a side that has
+        ended left unused is gone, and what a side still to come holds is
+        counted, since it is the period's to have.
         """
 
-        return max(self.allowance_kwh - self.allowance_used_kwh, 0.0)
+        if not self.sides:
+            return max(self.allowance_kwh - self.allowance_used_kwh, 0.0)
+        return sum(
+            side.remaining_kwh
+            for side in self.sides
+            if self.as_of is None or side.end > self.as_of
+        )
+
+    def side_on(self, day: date) -> AllowanceSide | None:
+        """The allowance year a day of the period falls in."""
+
+        for side in self.sides:
+            if side.start <= day < side.end:
+                return side
+        return None
+
+    def allowance_remaining_on(self, day: date) -> float:
+        """Subsidized energy still to be had on a day: its own side's, since
+        the next side's is not to be had before it begins."""
+
+        side = self.side_on(day)
+        if side is None:
+            return self.allowance_remaining_kwh
+        return side.remaining_kwh
 
     @property
     def energy_net(self) -> float:

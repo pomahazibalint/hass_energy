@@ -164,6 +164,9 @@
       "allowance_runs_out": {
         "name": "Allowance runs out"
       },
+      "allowance_runs_out_without_panels": {
+        "name": "Allowance runs out without panels"
+      },
       "battery_saving": {
         "name": "Battery saving under gross settlement"
       }

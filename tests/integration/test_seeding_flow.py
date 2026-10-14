@@ -145,7 +145,7 @@ async def test_seeded_energy_survives_the_price_schedule_changing(
     entry = hass.config_entries.async_get_entry(entry_id)
     assert entry is not None
     # Three price periods: the two backdated ones and the default dated today.
-    assert len(entry.runtime_data.data.subsidized) == 3
+    assert len(entry.runtime_data.data.subsidized) == 4
 
     result = await hass.config_entries.options.async_init(entry_id)
     form = await hass.config_entries.options.async_configure(
@@ -160,7 +160,7 @@ async def test_seeded_energy_survives_the_price_schedule_changing(
     assert bill.readings.imported_kwh == pytest.approx(4000.0)
     assert bill.readings.exported_kwh == pytest.approx(3500.0)
     assert bill.billed_kwh == pytest.approx(500.0)
-    assert len(bill.subsidized) == 2
+    assert len(bill.subsidized) == 3
 
 
 async def test_the_money_follows_the_seeded_energy(

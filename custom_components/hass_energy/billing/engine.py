@@ -6,10 +6,12 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import date
+from itertools import pairwise
 
-from .bill import Bill, Line, MeterReadings, SettlementPeriod, SurplusLine
+from .bill import AllowanceSide, Bill, Line, MeterReadings, SettlementPeriod, SurplusLine
 from .prices import PriceSchedule, Segment
-from .terms import AllowanceBasis, SettlementMode, TariffTerms
+from .terms import AllowanceBasis, SettlementMode, TariffTerms, allowance_year_starts
 
 
 def _share_by_days(total: float, segments: Sequence[Segment]) -> list[float]:
@@ -69,6 +71,13 @@ def _bands(
     return subsidized, billed_kwh - subsidized
 
 
+def _sides(period: SettlementPeriod) -> list[tuple[date, date]]:
+    """The period cut at each 1 August inside it: one allowance per piece."""
+
+    cuts = [period.start, *allowance_year_starts(period.start, period.end), period.end]
+    return list(pairwise(cuts))
+
+
 def calculate(
     period: SettlementPeriod,
     readings: MeterReadings,
@@ -78,6 +87,7 @@ def calculate(
     standing_charge_months: int,
     consumption_by_segment: Sequence[float] | None = None,
     feed_in_by_segment: Sequence[float] | None = None,
+    as_of: date | None = None,
 ) -> Bill:
     """Settle one period.
 
@@ -90,6 +100,13 @@ def calculate(
     Only their proportions matter: the billed and bought totals come from
     netting, and the shape says where in the period each fell. Without them the
     split falls back to days.
+
+    The allowance is applied per allowance year: a period that straddles
+    1 August has one allowance for each side, apportioned by that side's
+    days, against the energy billed on that side, and what one side leaves
+    unused does not help the other. ``as_of`` is the day the bill is as of,
+    for the allowance remaining: a side that has ended by then has lost what
+    it did not use.
     """
 
     if standing_charge_months < 0:
@@ -105,29 +122,46 @@ def calculate(
         billed_kwh = readings.imported_kwh
         surplus_kwh = readings.exported_kwh
 
-    allowance_kwh = terms.allowance_for(period.days)
-    used_elsewhere = (
-        readings.imported_kwh - billed_kwh
-        if terms.allowance_basis is AllowanceBasis.GROSS
-        else 0.0
-    )
-    subsidized_kwh, market_kwh = _bands(billed_kwh, allowance_kwh, used_elsewhere)
-
     consumption = _allocate(billed_kwh, segments, consumption_by_segment)
+    # Under the gross basis everything withdrawn eats the allowance, side by
+    # side, so the withdrawal is spread the same way as the billed energy.
+    withdrawn = _allocate(readings.imported_kwh, segments, consumption_by_segment)
     feed_in = _allocate(surplus_kwh, segments, feed_in_by_segment)
 
-    # Each band is spread across the price periods in proportion to how much
-    # energy was billed in each, then priced at the rate in force there.
+    # Each side of 1 August has its own allowance, apportioned by its days,
+    # against the energy billed on it. Within a side, each band is spread
+    # across the price periods in proportion to how much energy was billed
+    # in each, then priced at the rate in force there.
+    sides: list[AllowanceSide] = []
     subsidized_lines: list[Line] = []
     market_lines: list[Line] = []
-    for segment, quantity in zip(segments, consumption, strict=True):
-        share = quantity / billed_kwh if billed_kwh else 0.0
-        for band_kwh, prices, lines in (
-            (subsidized_kwh, segment.prices.subsidized, subsidized_lines),
-            (market_kwh, segment.prices.market, market_lines),
-        ):
-            if band_kwh * share:
-                lines.append(Line(segment.start, segment.end, band_kwh * share, prices))
+    for side_start, side_end in _sides(period):
+        on_side = [
+            index
+            for index, segment in enumerate(segments)
+            if side_start <= segment.start < side_end
+        ]
+        side_billed = sum(consumption[index] for index in on_side)
+        side_withdrawn = sum(withdrawn[index] for index in on_side)
+        allowance_kwh = terms.allowance_for((side_end - side_start).days)
+        used_elsewhere = (
+            side_withdrawn - side_billed
+            if terms.allowance_basis is AllowanceBasis.GROSS
+            else 0.0
+        )
+        subsidized_kwh, market_kwh = _bands(side_billed, allowance_kwh, used_elsewhere)
+        sides.append(
+            AllowanceSide(side_start, side_end, allowance_kwh, used_elsewhere + subsidized_kwh)
+        )
+        for index in on_side:
+            segment = segments[index]
+            share = consumption[index] / side_billed if side_billed else 0.0
+            for band_kwh, prices, lines in (
+                (subsidized_kwh, segment.prices.subsidized, subsidized_lines),
+                (market_kwh, segment.prices.market, market_lines),
+            ):
+                if band_kwh * share:
+                    lines.append(Line(segment.start, segment.end, band_kwh * share, prices))
 
     surplus_lines = tuple(
         SurplusLine(segment.start, segment.end, quantity, segment.prices.feed_in)
@@ -139,8 +173,10 @@ def calculate(
         period=period,
         readings=readings,
         billed_kwh=billed_kwh,
-        allowance_kwh=allowance_kwh,
-        allowance_used_kwh=used_elsewhere + subsidized_kwh,
+        allowance_kwh=sum(side.allowance_kwh for side in sides),
+        allowance_used_kwh=sum(side.used_kwh for side in sides),
+        sides=tuple(sides),
+        as_of=as_of,
         subsidized=tuple(subsidized_lines),
         market=tuple(market_lines),
         standing_charge_months=standing_charge_months,

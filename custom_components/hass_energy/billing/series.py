@@ -22,7 +22,7 @@ from __future__ import annotations
 from bisect import bisect_right
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, tzinfo
+from datetime import date, datetime, tzinfo
 
 from .bill import Bill, MeterReadings, SettlementPeriod
 from .engine import calculate
@@ -57,9 +57,13 @@ class HourCost:
     #: Change in what the supplier owes for surplus. Whole currency units,
     #: because the surplus is rounded per price period.
     compensation: int
-    #: Subsidized energy still to be had after the hour. Under szaldó it can
-    #: grow again, when export cancels import that had used it.
+    #: Subsidized energy still to be had after the hour, on the hour's own
+    #: side of 1 August. Under szaldó it can grow again, when export cancels
+    #: import that had used it.
     allowance_remaining_kwh: float = 0.0
+    #: When the hour's allowance year ends, which is when what it leaves
+    #: unused is lost.
+    side_end: date | None = None
 
 
 class _Ledger:
@@ -87,6 +91,8 @@ class _Ledger:
         self._starts = [segment.start for segment in segments]
         self.imported = [0.0] * len(segments)
         self.exported = [0.0] * len(segments)
+        #: The local day of the latest hour added: what the bill is as of.
+        self.as_of: date | None = None
 
     def index(self, hour: Hour) -> int:
         day = hour.start.astimezone(self._tz).date()
@@ -98,16 +104,21 @@ class _Ledger:
         index = self.index(hour)
         self.imported[index] += hour.imported_kwh
         self.exported[index] += hour.exported_kwh
+        day = hour.start.astimezone(self._tz).date()
+        self.as_of = day if self.as_of is None else max(self.as_of, day)
 
     def bill(self, extra: Hour | None = None) -> Bill:
         """The bill over everything added so far, plus one hour not yet added."""
 
         imported = list(self.imported)
         exported = list(self.exported)
+        as_of = self.as_of
         if extra is not None:
             index = self.index(extra)
             imported[index] += extra.imported_kwh
             exported[index] += extra.exported_kwh
+            day = extra.start.astimezone(self._tz).date()
+            as_of = day if as_of is None else max(as_of, day)
         return calculate(
             self._period,
             MeterReadings(sum(imported), sum(exported)),
@@ -116,6 +127,7 @@ class _Ledger:
             standing_charge_months=self._months,
             consumption_by_segment=imported,
             feed_in_by_segment=exported,
+            as_of=as_of,
         )
 
 
@@ -140,12 +152,15 @@ def allocate(
     for hour in hours:
         ledger.add(hour)
         after = ledger.bill()
+        day = hour.start.astimezone(tz).date()
+        side = after.side_on(day)
         costs.append(
             HourCost(
                 hour.start,
                 after.energy_gross - before.energy_gross,
                 after.surplus_net - before.surplus_net,
-                after.allowance_remaining_kwh,
+                after.allowance_remaining_on(day),
+                side.end if side else None,
             )
         )
         before = after

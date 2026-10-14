@@ -6,7 +6,29 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from enum import StrEnum
+
+#: The allowance year runs from 1 August to 31 July, and what one year leaves
+#: unused does not carry into the next.
+ALLOWANCE_YEAR_STARTS = (8, 1)
+
+
+def allowance_year_starts(start: date, end: date) -> list[date]:
+    """Each 1 August strictly inside a stretch of time, in order.
+
+    A settlement period that straddles one has two allowances, one per side,
+    each against that side's consumption; the supplier splits the period
+    there by a dictated or estimated reading.
+    """
+
+    month, day = ALLOWANCE_YEAR_STARTS
+    starts = []
+    for year in range(start.year, end.year + 1):
+        boundary = date(year, month, day)
+        if start < boundary < end:
+            starts.append(boundary)
+    return starts
 
 
 class SettlementMode(StrEnum):

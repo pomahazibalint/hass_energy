@@ -154,7 +154,7 @@ def test_a_price_change_splits_the_period() -> None:
     schedule = PriceSchedule(
         [
             Prices(date(2024, 1, 1), subsidized=36.386, market=70.104, feed_in=5.11),
-            Prices(date(2024, 7, 1), subsidized=40.0, market=80.0, feed_in=6.0),
+            Prices(date(2024, 8, 1), subsidized=40.0, market=80.0, feed_in=6.0),
         ]
     )
 
@@ -175,7 +175,7 @@ def test_energy_is_priced_at_the_rate_in_force_in_each_segment() -> None:
     schedule = PriceSchedule(
         [
             Prices(date(2024, 1, 1), subsidized=30.0, market=60.0, feed_in=5.0),
-            Prices(date(2024, 7, 1), subsidized=40.0, market=80.0, feed_in=6.0),
+            Prices(date(2024, 8, 1), subsidized=40.0, market=80.0, feed_in=6.0),
         ]
     )
 
@@ -197,7 +197,7 @@ def test_quantities_fall_back_to_a_day_split() -> None:
     schedule = PriceSchedule(
         [
             Prices(date(2024, 1, 1), subsidized=30.0, market=60.0, feed_in=5.0),
-            Prices(date(2024, 7, 1), subsidized=40.0, market=80.0, feed_in=6.0),
+            Prices(date(2024, 8, 1), subsidized=40.0, market=80.0, feed_in=6.0),
         ]
     )
 
@@ -207,7 +207,7 @@ def test_quantities_fall_back_to_a_day_split() -> None:
 
     first, second = bill.surplus
     assert first.kwh + second.kwh == pytest.approx(365)
-    assert first.kwh == pytest.approx(365 * 182 / 365)
+    assert first.kwh == pytest.approx(365 * 213 / 365)
 
 
 def test_segment_quantities_are_a_shape_scaled_to_the_settled_total() -> None:
@@ -216,7 +216,7 @@ def test_segment_quantities_are_a_shape_scaled_to_the_settled_total() -> None:
     schedule = PriceSchedule(
         [
             Prices(date(2024, 1, 1), subsidized=30.0, market=60.0, feed_in=5.0),
-            Prices(date(2024, 7, 1), subsidized=40.0, market=80.0, feed_in=6.0),
+            Prices(date(2024, 8, 1), subsidized=40.0, market=80.0, feed_in=6.0),
         ]
     )
     # 4 000 withdrawn against 1 000 fed in: 3 000 billed, in the 3:1 shape of
@@ -232,7 +232,12 @@ def test_segment_quantities_are_a_shape_scaled_to_the_settled_total() -> None:
     )
 
     assert bill.billed_kwh == 3000
-    assert [round(line.kwh, 6) for line in bill.subsidized] == [1892.25, 630.75]
+    # 2 250 billed before 1 August against 213 days of allowance, 750 after
+    # against 152 days: each side fills its own subsidized band.
+    assert [round(line.kwh, 6) for line in bill.subsidized] == [
+        round(2523 * 213 / 365, 6),
+        750,
+    ]
     assert bill.subsidized_kwh + bill.market_kwh == pytest.approx(3000)
     assert bill.surplus == ()
 
@@ -243,7 +248,7 @@ def test_gross_settlement_lines_add_up_to_the_gross_quantities() -> None:
     schedule = PriceSchedule(
         [
             Prices(date(2024, 1, 1), subsidized=30.0, market=60.0, feed_in=5.0),
-            Prices(date(2024, 7, 1), subsidized=40.0, market=80.0, feed_in=6.0),
+            Prices(date(2024, 8, 1), subsidized=40.0, market=80.0, feed_in=6.0),
         ]
     )
     terms = TariffTerms(mode=SettlementMode.BRUTTO)
@@ -258,11 +263,12 @@ def test_gross_settlement_lines_add_up_to_the_gross_quantities() -> None:
         feed_in_by_segment=[2000, 3000],
     )
 
+    # 3 000 withdrawn before 1 August against 213 days of allowance, 1 000
+    # after against 152 days of it, which covers all of it.
     assert [round(line.kwh, 6) for line in (*bill.subsidized, *bill.market)] == [
-        1892.25,
-        630.75,
-        1107.75,
-        369.25,
+        round(2523 * 213 / 365, 6),
+        1000,
+        round(3000 - 2523 * 213 / 365, 6),
     ]
     assert bill.subsidized_kwh + bill.market_kwh == pytest.approx(4000)
     assert [line.kwh for line in bill.surplus] == [2000, 3000]
@@ -273,7 +279,7 @@ def test_an_empty_shape_falls_back_to_a_day_split() -> None:
     schedule = PriceSchedule(
         [
             Prices(date(2024, 1, 1), subsidized=30.0, market=60.0, feed_in=5.0),
-            Prices(date(2024, 7, 1), subsidized=40.0, market=80.0, feed_in=6.0),
+            Prices(date(2024, 8, 1), subsidized=40.0, market=80.0, feed_in=6.0),
         ]
     )
 
@@ -287,19 +293,19 @@ def test_an_empty_shape_falls_back_to_a_day_split() -> None:
     )
 
     first, second = bill.surplus
-    assert first.kwh == pytest.approx(365 * 182 / 365)
+    assert first.kwh == pytest.approx(365 * 213 / 365)
     assert first.kwh + second.kwh == pytest.approx(365)
 
 
 def test_a_wrong_number_of_segment_quantities_is_rejected() -> None:
-    with pytest.raises(ValueError, match="Expected 1 per-segment quantities"):
+    with pytest.raises(ValueError, match="Expected 2 per-segment quantities"):
         calculate(
             YEAR,
             MeterReadings(1000),
             FLAT,
             TERMS,
             standing_charge_months=12,
-            consumption_by_segment=[500, 500],
+            consumption_by_segment=[500, 300, 200],
         )
 
 
@@ -321,3 +327,55 @@ def test_two_prices_cannot_start_on_the_same_day() -> None:
                 Prices(date(2024, 1, 1), subsidized=4, market=5, feed_in=6),
             ]
         )
+
+
+def test_each_side_of_august_has_its_own_allowance() -> None:
+    """What the spring leaves unused does not help the winter."""
+
+    period = SettlementPeriod(date(2025, 3, 1), date(2026, 3, 1))
+    terms = TariffTerms(annual_allowance_kwh=365.0)
+
+    bill = calculate(
+        period,
+        MeterReadings(imported_kwh=350),
+        FLAT,
+        terms,
+        standing_charge_months=12,
+        consumption_by_segment=[50, 300],
+    )
+
+    # 153 days of allowance before 1 August, 212 after; the total is inside
+    # the year's 365, and the winter's overshoot is still at the market price.
+    assert [(side.allowance_kwh, side.used_kwh) for side in bill.sides] == [
+        (153.0, 50.0),
+        (212.0, 212.0),
+    ]
+    assert bill.subsidized_kwh == pytest.approx(262)
+    assert bill.market_kwh == pytest.approx(88)
+    assert bill.allowance_kwh == pytest.approx(365)
+    # Over the whole period at once the spring's leftover still counts; as of
+    # a day after 1 August it is gone.
+    assert bill.allowance_remaining_kwh == pytest.approx(103)
+    later = calculate(
+        period,
+        MeterReadings(imported_kwh=350),
+        FLAT,
+        terms,
+        standing_charge_months=12,
+        consumption_by_segment=[50, 300],
+        as_of=date(2025, 9, 1),
+    )
+    assert later.allowance_remaining_kwh == 0
+
+
+def test_a_period_within_one_allowance_year_has_one_side() -> None:
+    bill = calculate(
+        SettlementPeriod(date(2024, 8, 1), date(2025, 8, 1)),
+        MeterReadings(imported_kwh=100),
+        FLAT,
+        TERMS,
+        standing_charge_months=12,
+    )
+
+    assert len(bill.sides) == 1
+    assert bill.sides[0].allowance_kwh == pytest.approx(2523)

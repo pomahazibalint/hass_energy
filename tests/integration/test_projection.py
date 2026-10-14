@@ -63,7 +63,9 @@ async def test_the_remaining_days_follow_last_years_shape(
     assert float(state_of(hass, "projected_billed_energy")) == pytest.approx(
         so_far + from_last_year + straight, abs=0.001
     )
-    assert state_of(hass, "allowance_runs_out") == "2027-02-04"
+    # The side of 1 August the period starts on earns 294 days of allowance,
+    # not the year's, so it runs out three weeks sooner than one total would.
+    assert state_of(hass, "allowance_runs_out") == "2027-01-14"
 
 
 async def test_a_first_year_is_the_straight_line(

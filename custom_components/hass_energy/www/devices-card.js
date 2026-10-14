@@ -4,8 +4,10 @@
 // Reads the integration's device cost sensors, which carry the device's
 // name, its energy, the device it is included in, and the figures behind
 // its cost: its energy in the hours worth each price, its share of the
-// house, the average per kWh and the hours its meter was capped at the
-// house's. The card shows the hierarchy the dashboard's own device graph
+// house, the average per kWh, the hours its meter was capped at the
+// house's and, with panels, what they saved on it: what the same energy
+// would have cost bought from the grid, less what it cost. The card shows
+// the hierarchy the dashboard's own device graph
 // shows rather than summing a parent and its child together, and the part
 // no device accounts for as the rest of the house, with the same columns.
 // The range is the settlement period, the question the integration
@@ -80,6 +82,7 @@ class HassEnergyDevicesCard extends HTMLElement {
         unit: a.unit_of_measurement || "",
         buckets: Object.fromEntries(BUCKETS.map(([key]) => [key, Number(a[key]) || 0])),
         capped: Number(a.capped_hours) || 0,
+        saved: saving(a),
         prices: a,
       };
     });
@@ -108,6 +111,7 @@ class HassEnergyDevicesCard extends HTMLElement {
       cost: Number(cost.state) || 0,
       kwh: Number(kwh.state) || 0,
       buckets: Object.fromEntries(BUCKETS.map(([key]) => [key, Number(a[key]) || 0])),
+      saved: saving(a),
       prices: a,
     };
   }
@@ -133,6 +137,8 @@ class HassEnergyDevicesCard extends HTMLElement {
     const prices = house?.prices || rows[0].prices;
     const all = house ? [...rows, house] : rows;
     const used = BUCKETS.filter(([key]) => all.some((row) => row.buckets[key] > 0.0005));
+    // A column nobody has a figure in is left out: without panels nothing was saved.
+    const saved = all.some((row) => row.saved !== null);
     const widest = Math.max(house?.cost ?? 0, ...top.map((device) => device.cost), 1);
 
     const line = (row, cls, label) => {
@@ -145,7 +151,9 @@ class HassEnergyDevicesCard extends HTMLElement {
         `<td class="value dim">${share === null ? "" : percent.format(share)}</td>` +
         used.map(([key]) => `<td class="value dim">${row.buckets[key] > 0.0005 ? kwh.format(row.buckets[key]) : ""}</td>`).join("") +
         `<td class="value dim">${row.kwh ? rate.format(row.cost / row.kwh) : ""}</td>` +
-        `<td class="value">${money.format(row.cost)} ${escape(unit)}</td></tr>`
+        `<td class="value">${money.format(row.cost)} ${escape(unit)}</td>` +
+        (saved ? `<td class="value">${row.saved === null ? "" : `${money.format(row.saved)} ${escape(unit)}`}</td>` : "") +
+        `</tr>`
       );
     };
 
@@ -158,6 +166,7 @@ class HassEnergyDevicesCard extends HTMLElement {
           BUCKETS.map(([key]) => [key, Math.max(house.buckets[key] - top.reduce((sum, d) => sum + d.buckets[key], 0), 0)])
         ),
         capped: 0,
+        saved: house.saved === null ? null : house.saved - top.reduce((sum, d) => sum + (d.saved || 0), 0),
       };
       body.push(line(rest, "rest", t(hass, "rest_of_house")));
       body.push(line({ ...house, capped: 0 }, "total", t(hass, "house")));
@@ -170,11 +179,20 @@ class HassEnergyDevicesCard extends HTMLElement {
           return `<th>${escape(t(hass, label))}${price}</th>`;
         })
         .join("") +
-      `<th>${escape(t(hass, "average"))}<span class="price">${escape(unit)}/kWh</span></th><th>${escape(t(hass, "cost"))}</th></tr>`;
+      `<th>${escape(t(hass, "average"))}<span class="price">${escape(unit)}/kWh</span></th><th>${escape(t(hass, "cost"))}</th>` +
+      (saved ? `<th>${escape(t(hass, "saved"))}</th>` : "") +
+      `</tr>`;
+    const note = t(hass, "columns_note") + (saved ? ` ${t(hass, "saved_note")}` : "");
     this.shadowRoot.innerHTML =
       `<style>${STYLE}</style><ha-card>${title}<div class="scroll"><table>${header}${body.join("")}</table></div>` +
-      `<div class="note">${escape(t(hass, "columns_note"))}</div></ha-card>`;
+      `<div class="note">${escape(note)}</div></ha-card>`;
   }
+}
+
+// What the panels saved on a cost, or null for a household without them,
+// whose sensors carry no such figure.
+function saving(attributes) {
+  return attributes.saved_by_panels === undefined ? null : Number(attributes.saved_by_panels) || 0;
 }
 
 function escape(text) {

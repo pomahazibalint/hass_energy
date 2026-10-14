@@ -6,6 +6,7 @@ import pytest
 from custom_components.hass_energy.const import (
     CONF_BATTERY_CAPACITY_KWH,
     CONF_BATTERY_EFFICIENCY_PERCENT,
+    CONF_MODE,
 )
 from custom_components.hass_energy.diagnostics import async_get_config_entry_diagnostics
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
@@ -22,8 +23,7 @@ from .conftest import (
     record,
     refresh,
 )
-from .test_costs import VAT
-from .test_sensor import state_of
+from .test_sensor import PREFIX, state_of
 
 START = TODAY - timedelta(days=10)
 #: Thirteen local hours of today have passed on the frozen clock.
@@ -109,6 +109,36 @@ async def test_diagnostics_report_the_outlook(
     assert report["battery"] is None
 
 
+async def test_a_szaldo_period_is_also_settled_gross(
+    entry: MockConfigEntry, hass: HomeAssistant
+) -> None:
+    """Three kWh exported then imported net to nothing; gross bills and buys them."""
+
+    await record(hass, IMPORT_ENTITY, DAY_START, [0.0, 3.0])
+    await record(hass, EXPORT_ENTITY, DAY_START, [3.0, 0.0])
+    await refresh(hass, entry)
+
+    netted = float(state_of(hass, "net_position"))
+    gross = float(state_of(hass, "net_position_under_gross_settlement"))
+    assert gross == pytest.approx(netted + 3 * 40 - 3 * 6.0, abs=1)
+    line = hass.states.get(PREFIX + "net_position_under_gross_settlement")
+    assert line is not None
+    assert line.attributes["difference"] == pytest.approx(gross - netted)
+    assert line.attributes["net_position"] == netted
+    report = await async_get_config_entry_diagnostics(hass, entry)
+    assert report["household"]["net_position_under_gross"] == gross
+
+
+async def test_under_gross_settlement_the_line_would_repeat_the_net_position(
+    entry: MockConfigEntry, hass: HomeAssistant
+) -> None:
+    hass.config_entries.async_update_entry(entry, options={**entry.options, CONF_MODE: "brutto"})
+    await hass.async_block_till_done()
+    await refresh(hass, entry)
+
+    assert state_of(hass, "net_position_under_gross_settlement") == STATE_UNAVAILABLE
+
+
 async def test_without_a_battery_configured_there_is_no_saving(
     entry: MockConfigEntry, hass: HomeAssistant
 ) -> None:
@@ -134,7 +164,7 @@ async def test_a_battery_is_priced_under_gross_settlement(
     await refresh(hass, entry)
 
     saving = float(state_of(hass, "battery_saving_under_gross_settlement"))
-    assert saving == pytest.approx(3 * 40 * VAT - 3 * 6.0, abs=2)
+    assert saving == pytest.approx(3 * 40 - 3 * 6.0, abs=2)
     report = await async_get_config_entry_diagnostics(hass, entry)
     assert report["battery"] == {
         "capacity_kwh": 10.0,

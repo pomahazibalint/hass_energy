@@ -20,7 +20,10 @@ class Prices:
     """The prices in force from one date until the next change.
 
     All are net of VAT, in the billing currency per kWh, matching how a
-    Hungarian invoice states unit prices.
+    Hungarian invoice states unit prices. The figures the household knows,
+    36.386 and 70.104 Ft/kWh, are the published ones with VAT in them, so a
+    caller that takes those brings them to net first; the feed-in price is
+    outside VAT and is what it says.
     """
 
     valid_from: date

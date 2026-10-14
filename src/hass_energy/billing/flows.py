@@ -85,7 +85,6 @@ class Flows(Hour):
             exported_kwh=max(self.exported_kwh - self.produced_kwh, 0.0),
         )
 
-
     def without_consumption(self) -> Hour:
         """The grid flows this hour would have had with nothing consumed.
 
@@ -100,12 +99,29 @@ class Flows(Hour):
         cheaply.
         """
 
-        grid = min(self.imported_kwh, self.consumption_kwh)
-        return Hour(
-            self.start,
-            imported_kwh=self.imported_kwh - grid,
-            exported_kwh=self.exported_kwh + self.consumption_kwh - grid,
-        )
+        return _without_consumption(self, self.consumption_kwh)
+
+    def without_solar_or_consumption(self) -> Hour:
+        """The grid flows with no panels and nothing consumed in this hour.
+
+        The pair ``without_solar`` is costed against: the difference between
+        the two bills is what the hour's consumption would have cost had
+        every kWh of it been bought from the grid, which is the same in
+        either settlement mode, since a house without panels has nothing to
+        net or to sell. What the panels saved on the hour is that less what
+        the consumption actually cost.
+        """
+
+        return _without_consumption(self.without_solar(), self.consumption_kwh)
+
+
+def _without_consumption(hour: Hour, consumption_kwh: float) -> Hour:
+    grid = min(hour.imported_kwh, consumption_kwh)
+    return Hour(
+        hour.start,
+        imported_kwh=hour.imported_kwh - grid,
+        exported_kwh=hour.exported_kwh + consumption_kwh - grid,
+    )
 
 
 def with_battery(

@@ -176,6 +176,58 @@ def test_an_hour_of_shortfall_has_nothing_to_not_consume() -> None:
     assert hour.without_consumption() == Hour(START, imported_kwh=0.5, exported_kwh=2.0)
 
 
+def purchase_cost(hours: list[Flows], terms: TariffTerms = TERMS) -> list[float]:
+    """What each hour's consumption would have cost bought from the grid."""
+
+    return marginal(
+        PERIOD,
+        [hour.without_solar() for hour in hours],
+        [hour.without_solar_or_consumption() for hour in hours],
+        SCHEDULE,
+        terms,
+        standing_charge_months=12,
+        tz=BUDAPEST,
+    )
+
+
+def test_without_solar_or_consumption_nothing_moves_through_the_meter() -> None:
+    """Two kWh of panels consumed and one exported: without either, nothing."""
+
+    hour = Flows(START, exported_kwh=1.0, produced_kwh=3.0)
+
+    assert hour.without_solar_or_consumption() == Hour(START)
+
+
+def test_without_solar_or_consumption_a_battery_still_exports() -> None:
+    hour = Flows(START, imported_kwh=1.0, exported_kwh=0.5, discharged_kwh=0.5)
+
+    assert hour.without_solar_or_consumption() == Hour(START, exported_kwh=0.5)
+
+
+def test_bought_from_the_grid_solar_consumed_in_surplus_costs_the_band_price() -> None:
+    """Under szaldó in surplus a consumed kWh is worth the feed-in price;
+    bought instead, it would have cost the band price with VAT."""
+
+    series = flows({"exported_kwh": 100.0, "produced_kwh": 100.0}, {"produced_kwh": 2.0})
+
+    assert consumption_cost(series)[1] == pytest.approx(2 * 5.0, abs=1e-6)
+    assert purchase_cost(series)[1] == pytest.approx(2 * 30.0 * VAT, abs=1e-6)
+
+
+def test_bought_from_the_grid_the_price_is_the_same_in_either_mode() -> None:
+    series = flows({"imported_kwh": 1.0, "produced_kwh": 2.0, "exported_kwh": 0.5})
+    gross = TariffTerms(mode=SettlementMode.BRUTTO)
+
+    assert purchase_cost(series) == pytest.approx(purchase_cost(series, gross))
+    assert purchase_cost(series)[0] == pytest.approx(2.5 * 30.0 * VAT, abs=1e-6)
+
+
+def test_without_panels_there_is_nothing_to_save() -> None:
+    series = flows({"imported_kwh": 2.0}, {"imported_kwh": 1.0})
+
+    assert purchase_cost(series) == pytest.approx(consumption_cost(series))
+
+
 def test_under_szaldo_a_kwh_consumed_is_worth_the_band_price() -> None:
     """Whether it came from the grid or the panels: it would have netted."""
 

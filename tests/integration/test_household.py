@@ -133,9 +133,9 @@ async def test_the_panels_are_worth_the_bill_there_would_be_without_them(
     assert without.readings.imported_kwh == pytest.approx(15.0)
     assert without.readings.exported_kwh == 0.0
     assert float(state_of(hass, "solar_value")) == without.net_position - bill.net_position
-    assert float(state_of(hass, "solar_value")) == pytest.approx(9 * 40 * 1.27, abs=1)
+    assert float(state_of(hass, "solar_value")) == pytest.approx(9 * 40, abs=1)
     assert sum(states(await rows(hass, entry, SOLAR_VALUE))) == pytest.approx(
-        9 * 40 * 1.27, abs=0.01
+        9 * 40, abs=0.01
     )
 
 
@@ -257,7 +257,7 @@ async def test_diagnostics_report_the_household(
     assert report["household"]["consumption_kwh"] == pytest.approx(2.0)
     assert report["household"]["consumption_kwh"] == float(state_of(hass, "house_consumption"))
     assert report["disagreement"]["hours"] == 0
-    assert report["household"]["solar_value"] == pytest.approx(2 * 40 * 1.27, abs=1)
+    assert report["household"]["solar_value"] == pytest.approx(2 * 40, abs=1)
 
 
 async def test_export_above_import_with_no_production_source_is_not_a_disagreement(

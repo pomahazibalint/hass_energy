@@ -192,6 +192,31 @@ sensor for the period, from the same first hour as the house's consumption.
 It is the figure the Devices view divides up, so the part no device accounts
 for can be shown as the rest of the house.
 
+What the panels saved on that consumption is the same walk over the house
+without them: the no-panels hours `without_solar` already gives, each costed
+against nothing consumed in it, which is what the hour's consumption would
+have cost bought from the grid. A house without panels has nothing to net
+or to sell, so the figure is the same in either settlement mode: the band
+price with VAT while the allowance would have lasted, the market price
+after. The saving is that less the consumption cost, for the house and for
+each device's share, and the device cost sensors and the consumption cost
+sensor carry both as attributes. The Devices card shows the saving as one
+more column, left out for a household without panels, whose sensors carry
+no such figure. It is one column rather than three: the pure purchase is
+the one baseline that reads in both regimes, and the contract what-if, what
+the period would cost under gross settlement, is a house-wide question that
+one line of the invoice answers. Two caveats, both in the card's note or
+the explanation behind a line: the actual cost is marginal and the savings
+do not sum to the solar value line, which compares two whole bills; and the
+no-panels house eats the allowance sooner, so a late hour's saving can be
+priced at the market rate where the real hour was not.
+
+The net position under gross settlement is the same hours settled gross,
+one more line of the invoice for a szaldó household asking what the switch
+would mean; under gross settlement it would repeat the net position, so the
+line is unavailable rather than said twice. The battery what-if had already
+settled the hours gross, and the two share the one walk.
+
 A device's cost in an hour is its share of the hour's consumption at that
 hour's consumption cost. Devices come from the preferences, with their names,
 and a device that includes another's consumption in its total carries that
@@ -286,9 +311,17 @@ The strategy arranged five views at first, one per question, each a single
 column of cards, then three in the sections grid. Use showed what it was
 becoming: the native energy dashboard with two tabs added. So that is what
 it is. The native dashboard's own tabs, Summary, Electricity, Gas, Water
-and Now, are views that delegate to Home Assistant's view strategies,
-chosen as the native dashboard chooses them from the preferences and
-titled with its own words; nothing of them is copied. After them come the
+and Now, are chosen as the native dashboard chooses them from the
+preferences and titled with its own words. All but Now are views that
+delegate to Home Assistant's view strategies, over the collection the
+native dashboard keys its date-picked tabs by; nothing of them is copied.
+Now is laid out by the strategy itself from the native power cards and
+badges, over the native dashboard's own collection for it, because the
+native power view is one section of the sections grid that the energy
+panel widens to the view with a style of its own, and in a dashboard it
+would be one column wide. Their titles, and the native cards', are in the
+energy panel's translation fragment, which a dashboard does not load, so
+the strategy loads it before it builds them. After them come the
 integration's two per metering point: Costs, the invoice and the outlook
 in the sidebar beside the costs for the selected range, the house's
 consumption and the devices; and History, the long view. The two are
@@ -467,6 +500,15 @@ Bill card had shown that a plain module is a hundred lines to own and
 nothing to build, and the two cards followed the same shape. The device
 cost sensors gained the device's name as an attribute so the Devices card
 needs no registry lookup.
+
+Savings. Done. What the panels saved on each device and on the house, and
+the period under gross settlement on the invoice. In the same release the
+prices were found to have been taken as net when the published figures,
+36.386 and 70.104 Ft/kWh, carry the VAT already, so every energy line had
+been 27% high; the options now say the prices are entered as published and
+the settings bring them to net for the engine, which was right to bill net
+and add the VAT as the invoice does. The feed-in price is outside VAT and
+was never touched.
 
 After the plan: the five views became three in the sections grid, the
 native energy cards came in, the History card gained the hover tooltip the

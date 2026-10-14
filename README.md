@@ -43,7 +43,10 @@ settlement period** action with the figures from your last invoice; only what
 the recorder does not already hold is kept. Past invoices can be brought in
 with **Import a settled invoice**, which records them as long-term statistics.
 A wrong meter reading is repaired where Home Assistant repairs any statistic,
-on the Developer tools Statistics page, and the settlement follows.
+on the Developer tools Statistics page, and the settlement follows. Prices
+are entered as they are published, with VAT in them: 36.386 and 70.104
+Ft/kWh. The settlement bills them net and adds the VAT as the invoice does;
+the feed-in price is outside VAT and is entered as it is.
 
 For Home Assistant's energy dashboard, set the grid consumption and return
 sources to **use an entity tracking the total costs** and pick the
@@ -79,11 +82,12 @@ Dashboards > Add dashboard**, where **Energy settlement** is listed among
 the custom dashboards; it builds itself from your metering points and needs
 no configuration. It is the native energy dashboard with two tabs added:
 Home Assistant's own Summary, Electricity, Gas, Water and Now tabs, as
-your sources call for them, built by Home Assistant itself, and then
+your sources call for them, from Home Assistant's own cards, and then
 **Costs**, the invoice and the outlook beside the costs for the selected
 range: the consumption cost and solar value by day, the house's
 consumption, a table of energy and cost per device over the settlement
-period with the rest of the house, and the device costs by day; and
+period with the rest of the house and, with panels, what they saved on
+each device, and the device costs by day; and
 **History**, each grid meter and the house by
 calendar month, this year over the two before it, and past settlements.
 The date picker floats at the bottom, as in the native dashboard. Tap any line of the
@@ -101,7 +105,9 @@ what-if** in the options, a capacity and a round-trip efficiency, gives a
 **Battery saving under gross settlement** sensor: what a battery the house
 does not have would have saved, priced under gross terms whatever the
 settlement mode, since under szaldó annual netting already is a free
-battery.
+battery. For a szaldó household the invoice also carries **Net position
+under gross settlement**, the same hours settled gross, which is what the
+switch every szaldó contract reaches would have meant this period.
 
 ## Quick start
 

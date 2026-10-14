@@ -79,9 +79,9 @@ async def test_each_hour_carries_the_change_in_the_bill(
     assert [row["start"] for row in cost[:3]] == [
         (DAY_START + timedelta(hours=i)).timestamp() for i in range(3)
     ]
-    # Import at 40 with VAT, then export cancelling four of those kWh.
-    assert states(cost)[:3] == pytest.approx([10 * 40 * VAT, -4 * 40 * VAT, 5 * 40 * VAT])
-    assert cost[2]["sum"] == pytest.approx(11 * 40 * VAT)
+    # Import at 40, the price as published, then export cancelling four of those kWh.
+    assert states(cost)[:3] == pytest.approx([10 * 40, -4 * 40, 5 * 40])
+    assert cost[2]["sum"] == pytest.approx(11 * 40)
     assert sum(row["state"] for row in cost) == pytest.approx(
         coordinator(entry).data.energy_gross
     )
@@ -131,7 +131,7 @@ async def test_a_backdated_price_rewrites_the_hours_it_covers(
     await record(hass, IMPORT_ENTITY, local_midnight(yesterday), [10.0])
     await refresh(hass, entry)
     before = {row["start"]: row["state"] for row in await rows(hass, entry, GRID_COST)}
-    assert before[local_midnight(yesterday).timestamp()] == pytest.approx(10 * 40 * VAT)
+    assert before[local_midnight(yesterday).timestamp()] == pytest.approx(10 * 40)
 
     hass.config_entries.async_update_entry(
         entry,
@@ -143,8 +143,8 @@ async def test_a_backdated_price_rewrites_the_hours_it_covers(
     await hass.async_block_till_done()
 
     after = {row["start"]: row["state"] for row in await rows(hass, entry, GRID_COST)}
-    assert after[local_midnight(two_days_ago).timestamp()] == pytest.approx(10 * 40 * VAT)
-    assert after[local_midnight(yesterday).timestamp()] == pytest.approx(10 * 80 * VAT)
+    assert after[local_midnight(two_days_ago).timestamp()] == pytest.approx(10 * 40)
+    assert after[local_midnight(yesterday).timestamp()] == pytest.approx(10 * 80)
     assert sum(after.values()) == pytest.approx(coordinator(entry).data.energy_gross)
 
 
@@ -168,10 +168,10 @@ async def test_the_sum_continues_across_a_closed_settlement(
 
     after = {row["start"]: row for row in await rows(hass, entry, GRID_COST)}
     first_of_new = after[DAY_START.timestamp()]
-    assert first_of_new["state"] == pytest.approx(5 * 40 * VAT)
-    assert first_of_new["sum"] == pytest.approx(last_of_old["sum"] + 5 * 40 * VAT)
+    assert first_of_new["state"] == pytest.approx(5 * 40)
+    assert first_of_new["sum"] == pytest.approx(last_of_old["sum"] + 5 * 40)
     # The old period's hours are untouched.
-    assert after[local_midnight(yesterday).timestamp()]["state"] == pytest.approx(10 * 40 * VAT)
+    assert after[local_midnight(yesterday).timestamp()]["state"] == pytest.approx(10 * 40)
 
 
 async def test_unchanged_hours_are_not_rewritten(
@@ -226,7 +226,7 @@ async def test_hours_nobody_watched_are_not_published(
     cost = await rows(hass, entry, GRID_COST)
     # From the first recorded hour on, nothing earlier.
     assert cost[0]["start"] == DAY_START.timestamp()
-    assert cost[0]["state"] == pytest.approx(10 * 40 * VAT)
+    assert cost[0]["state"] == pytest.approx(10 * 40)
     assert all(row["state"] == 0 for row in cost[1:])
 
 

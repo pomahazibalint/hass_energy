@@ -199,19 +199,24 @@ def _outlook(
     return Outlook(bill, allowance_runs_out(costs), len(projected), days_from_last_year)
 
 
-def _battery_saving(contract: Contract, hours: Sequence[Hour], battery: Battery) -> int:
-    """What a battery would have saved, priced under gross settlement.
+def _under_gross(
+    contract: Contract, hours: Sequence[Hour], battery: Battery | None
+) -> tuple[Bill, int | None]:
+    """The period under gross settlement, and what a battery would have saved in it.
 
-    Whatever the entry's mode: under szaldó the figure is near zero by
-    construction, and the question matters for the switch.
+    Both whatever the entry's mode: under szaldó a battery's saving is near
+    zero by construction, and the question matters for the switch, which
+    is also what the bill under gross settlement answers.
     """
 
     gross = replace(contract.terms, mode=SettlementMode.BRUTTO)
     real = contract.settle(hours, gross)
+    if battery is None:
+        return real, None
     simulated = contract.settle(
         with_battery(hours, battery.capacity_kwh, battery.round_trip_efficiency), gross
     )
-    return real.net_position - simulated.net_position
+    return real, real.net_position - simulated.net_position
 
 
 @dataclass
@@ -286,6 +291,12 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         self.consumption_costs: list[float] = []
         self.device_costs: dict[str, list[float]] = {}
         self.rates: list[Rate] = []
+        #: What each hour's consumption would have cost bought from the grid,
+        #: with no panels, and each device's part of that: what the panels
+        #: saved is the difference. Empty without a production source, when
+        #: there is nothing to have saved.
+        self.purchase_costs: list[float] = []
+        self.device_purchases: dict[str, list[float]] = {}
         self.device_excess: dict[str, list[float]] = {}
         #: Hours carrying the seeded remainder, which are the invoice's
         #: hours rather than the recorder's and count in no figure of the
@@ -295,6 +306,10 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         #: Where the period is heading, and what a battery would have saved.
         self.outlook: Outlook | None = None
         self.battery_saving: int | None = None
+        #: The same hours settled under gross settlement, for a szaldó
+        #: household asking what the switch would mean; None under gross
+        #: settlement, where it is the bill itself.
+        self.bill_under_gross: Bill | None = None
 
     @property
     def import_entity(self) -> str:
@@ -395,7 +410,19 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             contract.marginal, hours, [hour.without_consumption() for hour in hours]
         )
         self.consumption_costs = costs if observed.hours else []
-        self.device_costs = self._device_costs(observed)
+        self.device_costs = self._device_costs(observed, self.consumption_costs)
+        # What the same consumption would have cost bought from the grid:
+        # the no-panels hours costed against nothing consumed in them. Only
+        # with panels; without them it is the consumption cost itself.
+        if self.sources.production and observed.hours:
+            self.purchase_costs = await self.hass.async_add_executor_job(
+                contract.marginal,
+                [hour.without_solar() for hour in hours],
+                [hour.without_solar_or_consumption() for hour in hours],
+            )
+        else:
+            self.purchase_costs = []
+        self.device_purchases = self._device_costs(observed, self.purchase_costs)
         # What price each hour's consumption was worth: the ingredient a
         # figure explains itself with, so many kWh at this price.
         self.rates = (
@@ -412,10 +439,11 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
 
         self.outlook = await self._project(contract, hours, bill, observed)
         battery = battery_from_options(self.entry.options)
-        self.battery_saving = (
-            await self.hass.async_add_executor_job(_battery_saving, contract, hours, battery)
-            if battery
-            else None
+        under_gross, self.battery_saving = await self.hass.async_add_executor_job(
+            _under_gross, contract, hours, battery
+        )
+        self.bill_under_gross = (
+            under_gross if contract.terms.mode is SettlementMode.SZALDO else None
         )
 
         # The panels' worth is the bill there would have been without them.
@@ -599,15 +627,20 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             for statistic, kwh in observed.devices.items()
         }
 
-    def _device_costs(self, observed: Observed) -> dict[str, list[float]]:
-        """Each device's share of each hour's consumption, at that hour's cost."""
+    def _device_costs(
+        self, observed: Observed, costs: Sequence[float]
+    ) -> dict[str, list[float]]:
+        """Each device's share of each hour's consumption, at that hour's cost.
 
+        Empty when the costs are, which is a figure nobody has.
+        """
+
+        if not costs:
+            return {}
         return {
             statistic: [
                 device_share(used, hour.consumption_kwh)[0] * cost
-                for hour, used, cost in zip(
-                    observed.hours, kwh, self.consumption_costs, strict=True
-                )
+                for hour, used, cost in zip(observed.hours, kwh, costs, strict=True)
             ]
             for statistic, kwh in observed.devices.items()
         }
@@ -816,7 +849,23 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         return {
             **self.breakdown([hour.consumption_kwh for hour in self.observed.hours], since),
             "average_per_kwh": round(cost / used, 2) if used else 0.0,
+            **self.saved_by_panels(self.purchase_costs, self.consumption_costs, since),
             **self.prices_with_vat(),
+        }
+
+    def saved_by_panels(
+        self, purchases: Sequence[float], costs: Sequence[float], since: datetime | None
+    ) -> dict[str, int]:
+        """What the panels saved on a cost: what it would have been bought from
+        the grid, less what it was. Nothing without panels, when there is no
+        figure rather than a zero."""
+
+        if not purchases:
+            return {}
+        bought = forint(self._seen(purchases, since))
+        return {
+            "cost_without_panels": bought,
+            "saved_by_panels": bought - forint(self._seen(costs, since)),
         }
 
     def device_breakdown(self, statistic: str) -> dict[str, float | int]:
@@ -840,6 +889,11 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             "share_of_house": round(energy / house, 4) if house else 0.0,
             "capped_hours": sum(1 for lost in excess if lost > 0),
             "excess_kwh": round(sum(excess), 3),
+            **self.saved_by_panels(
+                self.device_purchases.get(statistic, []),
+                self.device_costs.get(statistic, []),
+                since,
+            ),
             **self.prices_with_vat(),
         }
 
@@ -917,17 +971,19 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         return schedule.entries[0].valid_from <= self.state.start
 
     def current_unit_price(self, today: date | None = None) -> float:
-        """What the next kWh costs, at the band in force.
+        """What the next kWh costs, at the band in force, with VAT.
 
         The figure to point Home Assistant's energy dashboard at, since that
-        wants a price rather than a bill.
+        wants a price rather than a bill: what the household pays, which is
+        the published figure.
         """
 
         prices = self._prices_today(today)
+        with_vat = 1 + terms_from_options(self.entry.options).vat_percent / 100
         bill = self.data
         if bill is not None and bill.allowance_remaining_kwh <= 0:
-            return prices.market
-        return prices.subsidized
+            return round(prices.market * with_vat, 3)
+        return round(prices.subsidized * with_vat, 3)
 
     def current_feed_in_price(self, today: date | None = None) -> float:
         """What the supplier pays for the next kWh fed in beyond netting.

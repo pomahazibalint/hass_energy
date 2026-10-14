@@ -20,6 +20,7 @@ async def async_get_config_entry_diagnostics(
     coordinator = entry.runtime_data
     terms = terms_from_options(entry.options)
     schedule = schedule_from_options(entry.options)
+    with_vat = 1 + terms_from_options(entry.options).vat_percent / 100
     bill = coordinator.data
 
     settlement: dict[str, Any] | None = None
@@ -63,6 +64,9 @@ async def async_get_config_entry_diagnostics(
         "solar_kept_kwh": coordinator.household_solar_kept_kwh(),
         "solar_value": coordinator.solar_value_total(),
         "consumption_cost": coordinator.consumption_cost_total(),
+        "net_position_under_gross": (
+            coordinator.bill_under_gross.net_position if coordinator.bill_under_gross else None
+        ),
     }
 
     consumption = coordinator.household_consumption_kwh()
@@ -151,6 +155,8 @@ async def async_get_config_entry_diagnostics(
                 "valid_from": prices.valid_from.isoformat(),
                 "subsidized": prices.subsidized,
                 "market": prices.market,
+                "subsidized_with_vat": round(prices.subsidized * with_vat, 3),
+                "market_with_vat": round(prices.market * with_vat, 3),
                 "feed_in": prices.feed_in,
             }
             for prices in schedule.entries

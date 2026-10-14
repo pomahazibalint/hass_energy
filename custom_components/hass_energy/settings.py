@@ -103,6 +103,16 @@ def standing_charge_months(options: Mapping[str, Any]) -> int:
 
 
 def schedule_from_options(options: Mapping[str, Any]) -> PriceSchedule:
+    """The price schedule as the engine wants it, net of VAT.
+
+    The subsidized and market prices are stored as the household meets
+    them: the published figures, 36.386 and 70.104 Ft/kWh, which already
+    carry the 27% VAT. The engine prices its lines net and adds the VAT as
+    the invoice does, so the two are brought to net here. The feed-in price
+    is outside VAT and passes through as it is.
+    """
+
+    net = 1 / (1 + float(options.get(CONF_VAT_PERCENT, DEFAULT_VAT_PERCENT)) / 100)
     """Read the price schedule out of the entry options."""
 
     # Home Assistant's clock, not the host's: the rest of the integration dates
@@ -113,8 +123,8 @@ def schedule_from_options(options: Mapping[str, Any]) -> PriceSchedule:
         [
             Prices(
                 valid_from=date.fromisoformat(row[CONF_VALID_FROM]),
-                subsidized=float(row[CONF_SUBSIDIZED]),
-                market=float(row[CONF_MARKET]),
+                subsidized=float(row[CONF_SUBSIDIZED]) * net,
+                market=float(row[CONF_MARKET]) * net,
                 feed_in=float(row[CONF_FEED_IN]),
             )
             for row in rows

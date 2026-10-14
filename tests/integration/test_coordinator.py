@@ -90,8 +90,12 @@ async def test_an_hour_is_priced_by_the_local_day_it_fell_in(
     await refresh(hass, entry)
 
     bill = coordinator(entry).data
-    assert [round(line.unit_price) for line in bill.subsidized] == [40, 50]
-    assert bill.energy_net == pytest.approx(10 * 40.0 + 10 * 50.0)
+    # The lines are net; the configured 40 and 50 are the prices with VAT.
+    assert [round(line.unit_price, 3) for line in bill.subsidized] == [
+        round(40 / 1.27, 3),
+        round(50 / 1.27, 3),
+    ]
+    assert bill.energy_net == pytest.approx((10 * 40.0 + 10 * 50.0) / 1.27)
 
 
 async def test_netting_bills_the_difference(
@@ -134,7 +138,7 @@ async def test_gross_settlement_bills_all_withdrawal_and_buys_all_feed_in(
 
     bill = coordinator(entry).data
     assert bill.billed_kwh == 500.0
-    assert bill.energy_net == 500.0 * 40.0
+    assert bill.energy_net == pytest.approx(500.0 * 40.0 / 1.27)
     assert bill.surplus_kwh == 800.0
     assert bill.surplus_net == forint(800.0 * 6.0)
 
@@ -189,7 +193,7 @@ async def test_a_backdated_price_applies_to_the_hours_after_its_date(
     await record(hass, IMPORT_ENTITY, local_midnight(two_days_ago), [10.0])
     await record(hass, IMPORT_ENTITY, local_midnight(TODAY - timedelta(days=1)), [10.0])
     await refresh(hass, entry)
-    assert coordinator(entry).data.energy_net == pytest.approx(20 * 40.0)
+    assert coordinator(entry).data.energy_net == pytest.approx(20 * 40.0 / 1.27)
 
     hass.config_entries.async_update_entry(
         entry,
@@ -203,7 +207,7 @@ async def test_a_backdated_price_applies_to_the_hours_after_its_date(
     )
     await hass.async_block_till_done()
 
-    assert coordinator(entry).data.energy_net == pytest.approx(10 * 40.0 + 10 * 80.0)
+    assert coordinator(entry).data.energy_net == pytest.approx((10 * 40.0 + 10 * 80.0) / 1.27)
 
 
 async def test_closing_a_settlement_starts_a_new_period(

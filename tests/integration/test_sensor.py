@@ -144,13 +144,14 @@ async def test_every_money_line_carries_the_figures_it_was_made_of(
 
     payable = hass.states.get(PREFIX + "total_payable")
     assert payable is not None
-    assert payable.attributes["energy_net"] == pytest.approx(10 * 40.0)
+    # The configured 40 carries the VAT; the line is net.
+    assert payable.attributes["energy_net"] == pytest.approx(10 * 40.0 / 1.27, abs=0.01)
     assert payable.attributes["standing_charge_net"] == pytest.approx(12 * 120.5)
     assert payable.attributes["vat_percent"] == 27.0
     energy = hass.states.get(PREFIX + "energy_cost")
     assert energy is not None
     assert energy.attributes["subsidized_kwh"] == pytest.approx(10.0)
-    assert energy.attributes["lines"][0]["unit_price"] == 40.0
+    assert energy.attributes["lines"][0]["unit_price"] == pytest.approx(40.0 / 1.27)
     standing = hass.states.get(PREFIX + "standing_charge")
     assert standing is not None
     assert standing.attributes["months"] == 12

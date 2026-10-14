@@ -183,6 +183,23 @@ SENSORS: tuple[SettlementSensorDescription, ...] = (
         value=lambda c: c.data.net_position,
         behind=lambda c: {"total_payable": c.data.gross_total, "surplus_owed": c.data.surplus_net},
     ),
+    # The same hours under gross settlement, for a szaldó household asking
+    # what the switch would mean. Under gross settlement it would repeat the
+    # net position, so the line is unavailable rather than said twice.
+    SettlementSensorDescription(
+        key="net_position_under_gross",
+        translation_key="net_position_under_gross",
+        state_class=SensorStateClass.TOTAL,
+        monetary=True,
+        available=lambda c: c.bill_under_gross is not None,
+        value=lambda c: c.bill_under_gross.net_position if c.bill_under_gross else None,
+        behind=lambda c: {
+            "total_payable_under_gross": (g := c.bill_under_gross) and g.gross_total,
+            "surplus_owed_under_gross": g and g.surplus_net,
+            "net_position": c.data.net_position,
+            "difference": g and g.net_position - c.data.net_position,
+        },
+    ),
     SettlementSensorDescription(
         key="period_days",
         translation_key="period_days",

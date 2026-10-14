@@ -15,6 +15,7 @@ const LINES = [
   ["vat", "net"],
   ["total_payable", "total"],
   ["net_position", "total"],
+  ["net_position_under_gross", "info"],
   ["allowance_remaining", "info"],
   ["period_days", "info"],
 ];
@@ -155,6 +156,14 @@ function explain(hass, line, state) {
     case "net_position":
       return "total_payable" in a
         ? t(hass, "behind_net_position", { payable: money(a.total_payable), surplus: money(a.surplus_owed) })
+        : "";
+    case "net_position_under_gross":
+      return "difference" in a
+        ? t(hass, "behind_net_position_under_gross", {
+            payable: money(a.total_payable_under_gross),
+            surplus: money(a.surplus_owed_under_gross),
+            difference: money(a.difference),
+          })
         : "";
     case "allowance_remaining":
       return "allowance_kwh" in a

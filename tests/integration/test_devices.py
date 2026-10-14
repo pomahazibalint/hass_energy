@@ -24,7 +24,7 @@ from .conftest import (
     record,
     refresh,
 )
-from .test_costs import VAT, rows, states
+from .test_costs import rows, states
 from .test_household import known
 from .test_sensor import PREFIX, state_of
 
@@ -54,9 +54,9 @@ async def test_what_the_house_consumed_cost_the_band_price(
     await refresh(hass, entry)
 
     assert states(await rows(hass, entry, CONSUMPTION_COST))[:2] == pytest.approx(
-        [3 * BAND * VAT, 3 * BAND * VAT], abs=1e-4
+        [3 * BAND, 3 * BAND], abs=1e-4
     )
-    assert state_of(hass, "consumption_cost") == str(round(6 * BAND * VAT))
+    assert state_of(hass, "consumption_cost") == str(round(6 * BAND))
 
 
 async def test_consumption_beyond_what_would_net_is_worth_the_feed_in_price(
@@ -70,7 +70,7 @@ async def test_consumption_beyond_what_would_net_is_worth_the_feed_in_price(
     await refresh(hass, entry)
 
     assert states(await rows(hass, entry, CONSUMPTION_COST))[1] == pytest.approx(
-        2 * BAND * VAT + 1 * FEED_IN, abs=1e-4
+        2 * BAND + 1 * FEED_IN, abs=1e-4
     )
 
 
@@ -87,7 +87,7 @@ async def test_under_gross_settlement_solar_consumed_is_worth_the_feed_in_price(
     await refresh(hass, entry)
 
     assert states(await rows(hass, entry, CONSUMPTION_COST))[:2] == pytest.approx(
-        [2 * BAND * VAT, 3 * FEED_IN], abs=1e-4
+        [2 * BAND, 3 * FEED_IN], abs=1e-4
     )
 
 
@@ -100,8 +100,8 @@ async def test_a_device_costs_its_share_of_the_hour(
     await refresh(hass, entry)
 
     hourly = states(await rows(hass, entry, device_rows(entry, WASHER)))
-    assert hourly[:2] == pytest.approx([1 * BAND * VAT, 2 * BAND * VAT], abs=1e-4)
-    assert state_of(hass, "washer_cost") == str(round(3 * BAND * VAT))
+    assert hourly[:2] == pytest.approx([1 * BAND, 2 * BAND], abs=1e-4)
+    assert state_of(hass, "washer_cost") == str(round(3 * BAND))
     washer = hass.states.get(PREFIX + "washer_cost")
     assert washer is not None
     assert washer.attributes["unit_of_measurement"] == "Ft"
@@ -130,7 +130,7 @@ async def test_a_device_that_runs_on_the_panels_is_cheaper_under_gross_settlemen
     await refresh(hass, entry)
 
     assert state_of(hass, "washer_cost") == str(round(2 * FEED_IN))
-    assert state_of(hass, "heat_pump_cost") == str(round(2 * BAND * VAT))
+    assert state_of(hass, "heat_pump_cost") == str(round(2 * BAND))
 
 
 async def test_a_device_is_named_as_the_dashboard_names_it(
@@ -162,7 +162,7 @@ async def test_a_device_above_the_house_is_capped_and_reported(
     await refresh(hass, entry)
 
     hourly = states(await rows(hass, entry, device_rows(entry, WASHER)))
-    assert hourly[:2] == pytest.approx([1 * BAND * VAT, 0.5 * BAND * VAT], abs=1e-4)
+    assert hourly[:2] == pytest.approx([1 * BAND, 0.5 * BAND], abs=1e-4)
     registry = ir.async_get(hass)
     issue = registry.async_get_issue(DOMAIN, f"device_bursts_{entry.entry_id}")
     assert issue is not None
@@ -202,7 +202,7 @@ async def test_a_device_named_in_the_dashboard_appears_without_a_reload(
 
     await name_sources(hass, devices=[device(WASHER, name="Washer")])
 
-    assert state_of(hass, "washer_cost") == str(round(1 * BAND * VAT))
+    assert state_of(hass, "washer_cost") == str(round(1 * BAND))
 
 
 async def test_a_device_is_known_from_its_own_first_hour(
@@ -263,8 +263,8 @@ async def test_a_nested_device_carries_its_childs_cost(
     await record(hass, WASHER, DAY_START, [1.0])
     await refresh(hass, entry)
 
-    assert state_of(hass, "heat_pump_cost") == str(round(3 * BAND * VAT))
-    assert state_of(hass, "washer_cost") == str(round(1 * BAND * VAT))
+    assert state_of(hass, "heat_pump_cost") == str(round(3 * BAND))
+    assert state_of(hass, "washer_cost") == str(round(1 * BAND))
     washer = hass.states.get(PREFIX + "washer_cost")
     assert washer is not None
     assert washer.attributes["included_in"] == HEAT_PUMP
@@ -306,7 +306,7 @@ async def test_diagnostics_report_the_devices(
 
     report = await async_get_config_entry_diagnostics(hass, entry)
 
-    assert report["household"]["consumption_cost"] == round(4 * BAND * VAT)
+    assert report["household"]["consumption_cost"] == round(4 * BAND)
     assert report["devices"] == [
         {
             "statistic": WASHER,
@@ -315,7 +315,7 @@ async def test_diagnostics_report_the_devices(
             "since": DAY_START.isoformat(),
             "kwh": pytest.approx(1.0),
             "share": pytest.approx(0.25),
-            "cost": round(1 * BAND * VAT),
+            "cost": round(1 * BAND),
             "excess_kwh": 0.0,
         }
     ]
@@ -345,13 +345,38 @@ async def test_a_devices_cost_carries_the_figures_it_was_made_of(
     assert attributes["kwh_mixed"] == 0.0
     assert attributes["share_of_house"] == pytest.approx(3 / 6)
     assert attributes["capped_hours"] == 0
-    assert attributes["subsidized_price_with_vat"] == pytest.approx(BAND * VAT)
+    assert attributes["subsidized_price_with_vat"] == pytest.approx(BAND)
     assert attributes["feed_in_price"] == FEED_IN
-    assert attributes["average_per_kwh"] == pytest.approx((2 * BAND * VAT + FEED_IN) / 3, abs=0.01)
+    assert attributes["average_per_kwh"] == pytest.approx((2 * BAND + FEED_IN) / 3, abs=0.01)
 
     house = hass.states.get(PREFIX + "consumption_cost")
     assert house is not None
     assert house.attributes["energy_kwh"] == pytest.approx(6.0)
     assert house.attributes["kwh_at_subsidized"] == pytest.approx(4.0)
     assert house.attributes["kwh_at_feed_in"] == pytest.approx(2.0)
+
+    # Bought from the grid, every kWh would have cost the band price: the
+    # panels saved the difference, on the device and on the house.
+    assert attributes["cost_without_panels"] == round(3 * BAND)
+    assert attributes["saved_by_panels"] == round(3 * BAND) - round(2 * BAND + FEED_IN)
+    assert house.attributes["cost_without_panels"] == round(6 * BAND)
+    assert house.attributes["saved_by_panels"] == round(6 * BAND) - round(4 * BAND + 2 * FEED_IN)
+
+
+async def test_without_panels_there_is_no_saving_to_report(
+    entry: MockConfigEntry, hass: HomeAssistant
+) -> None:
+    """A household without panels has no figure, rather than a zero."""
+
+    await name_sources(hass, devices=[device(WASHER, name="Washer")])
+    await record(hass, IMPORT_ENTITY, DAY_START, [4.0])
+    await record(hass, WASHER, DAY_START, [2.0])
+    await refresh(hass, entry)
+
+    washer = hass.states.get(PREFIX + "washer_cost")
+    assert washer is not None
+    assert "saved_by_panels" not in washer.attributes
+    house = hass.states.get(PREFIX + "consumption_cost")
+    assert house is not None
+    assert "saved_by_panels" not in house.attributes
 

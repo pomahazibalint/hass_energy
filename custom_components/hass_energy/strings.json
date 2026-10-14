@@ -59,12 +59,12 @@
         "description": "Set the prices in force from a chosen day. Leave the date at today for a change from now, or set it back to correct something noticed late. Prices already effective on that day are replaced.",
         "data": {
           "valid_from": "In force from",
-          "subsidized": "Subsidized price",
-          "market": "Market price",
+          "subsidized": "Subsidized price, VAT included as published",
+          "market": "Market price, VAT included as published",
           "feed_in": "Feed-in price"
         },
         "data_description": {
-          "feed_in": "Paid for generation that netting cannot absorb. Typically a fraction of the price the same kWh costs to buy."
+          "feed_in": "Paid for generation that netting cannot absorb, outside VAT. Typically a fraction of the price the same kWh costs to buy."
         }
       },
       "remove_price": {
@@ -127,6 +127,9 @@
       },
       "net_position": {
         "name": "Net position"
+      },
+      "net_position_under_gross": {
+        "name": "Net position under gross settlement"
       },
       "period_days": {
         "name": "Settlement period length"

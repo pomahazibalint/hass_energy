@@ -32,7 +32,12 @@ class HassEnergyDashboardStrategy {
       hass.callWS({ type: "energy/get_prefs" }).catch(() => null),
     ]);
     const loaded = entries.filter((entry) => entry.state === "loaded");
-    const views = nativeTabs(hass, prefs);
+    // The native tabs' and cards' titles are in the energy panel's own
+    // translation fragment, which only that panel loads; a dashboard has
+    // the lovelace fragment alone. Loading it hands back the localize that
+    // knows the words, and the dashboard regenerates when localize changes.
+    const localize = (await hass.loadFragmentTranslation?.("energy").catch(() => null)) || hass.localize;
+    const views = nativeTabs(hass, prefs, localize);
     loaded.forEach((entry, index) => {
       views.push(...viewsFor(entry, registry, statistics, prefs, hass, index, loaded.length > 1));
     });
@@ -100,12 +105,26 @@ function preferencesOf(prefs) {
   return { imported, exported, solar, battery, devices };
 }
 
-// The native dashboard's tabs, each a view Home Assistant's own strategy
-// builds, chosen as the native dashboard chooses them: electricity when
-// there is a grid, solar, battery or devices; gas and water when named;
-// Now when any source reports power; and the summary when there is power
-// or more than one kind of energy. Titles are Home Assistant's own.
-function nativeTabs(hass, prefs) {
+// The native dashboard's tabs, chosen as the native dashboard chooses them:
+// electricity when there is a grid, solar, battery or devices; gas and
+// water when named; Now when any source reports power; and the summary
+// when there is power or more than one kind of energy. Titles are Home
+// Assistant's own. All but Now are views Home Assistant's own strategies
+// build, over the collection the native dashboard keys its date-picked
+// tabs by. Now is built here, see nowView.
+const COLLECTION = "energy_dashboard";
+const NOW_COLLECTION = "energy_dashboard_now";
+
+const hasPower = (prefs) =>
+  (prefs?.energy_sources || []).some(
+    (source) =>
+      (["solar", "battery"].includes(source.type) && source.stat_rate) ||
+      (source.type === "grid" && (source.stat_rate || source.power_config))
+  );
+const hasRate = (list) => (list || []).some((one) => one.stat_rate);
+const hasRateOf = (prefs, kind) => (prefs?.energy_sources || []).some((s) => s.type === kind && s.stat_rate);
+
+function nativeTabs(hass, prefs, localize) {
   const sources = prefs?.energy_sources || [];
   const kinds = new Set(sources.map((source) => source.type));
   const energy = ["grid", "solar", "battery"].some((kind) => kinds.has(kind));
@@ -113,20 +132,105 @@ function nativeTabs(hass, prefs) {
   const gas = kinds.has("gas");
   const water = kinds.has("water") || (prefs?.device_consumption_water || []).length > 0;
   const power =
-    sources.some((source) => source.stat_rate || source.power_config || (source.flow_from || []).some((f) => f.stat_rate)) ||
-    (prefs?.device_consumption || []).some((device) => device.stat_rate);
+    hasPower(prefs) ||
+    hasRate(prefs?.device_consumption) ||
+    hasRate(prefs?.device_consumption_water) ||
+    hasRateOf(prefs, "water") ||
+    hasRateOf(prefs, "gas");
+  const title = (path) => localize(`ui.panel.energy.title.${path}`) || path;
   const tab = (path, type) => ({
     path,
-    strategy: { type },
-    title: hass.localize(`ui.panel.energy.title.${path}`) || path,
+    title: title(path),
+    strategy: { type, collection_key: COLLECTION },
   });
   const tabs = [];
   if (energy || devices) tabs.push(tab("electricity", "energy"));
   if (gas) tabs.push(tab("gas", "gas"));
   if (water) tabs.push(tab("water", "water"));
-  if (power) tabs.push(tab("now", "power"));
+  if (power) tabs.push(nowView(hass, prefs, localize, title("now")));
   if (power || [energy, gas, water].filter(Boolean).length > 1) tabs.unshift(tab("overview", "energy-overview"));
   return tabs;
+}
+
+// The Now tab, the native power view's cards and badges over the native
+// dashboard's own collection for it. Built here rather than delegated
+// because the native view is one section of the sections grid and the
+// energy panel widens it to the view with a style of its own; in a
+// dashboard the section would be one column wide. This one spans them all.
+function nowView(hass, prefs, localize, title) {
+  const sources = prefs?.energy_sources || [];
+  const native = (card) => ({ ...card, collection_key: NOW_COLLECTION });
+  const badges = [];
+  if (hasPower(prefs)) badges.push(native({ type: "power-total" }));
+  if (hasRateOf(prefs, "gas")) badges.push(native({ type: "gas-total" }));
+  if (hasRateOf(prefs, "water")) badges.push(native({ type: "water-total" }));
+  for (const source of sources) {
+    if (source.type === "battery" && source.stat_soc) badges.push({ type: "entity", entity: source.stat_soc });
+  }
+  const cards = [];
+  if (hasPower(prefs)) {
+    cards.push(
+      native({ title: localize("ui.panel.energy.cards.power_sources_graph_title"), type: "power-sources-graph" })
+    );
+  }
+  if (hasRate(prefs?.device_consumption)) {
+    const grouped = groupedByPlace(prefs.device_consumption, hass);
+    cards.push(
+      native({
+        title: localize("ui.panel.energy.cards.power_sankey_title"),
+        type: "power-sankey",
+        group_by_floor: grouped,
+        group_by_area: grouped,
+      })
+    );
+  }
+  if (hasRate(prefs?.device_consumption_water)) {
+    const grouped = groupedByPlace(prefs.device_consumption_water, hass);
+    cards.push(
+      native({
+        title: localize("ui.panel.energy.cards.water_flow_sankey_title"),
+        type: "water-flow-sankey",
+        group_by_floor: grouped,
+        group_by_area: grouped,
+      })
+    );
+  }
+  const view = {
+    path: "now",
+    title,
+    type: "sections",
+    sections: [{ type: "grid", column_span: 4, cards: cards.map(main) }],
+  };
+  if (badges.length) view.badges = badges;
+  return view;
+}
+
+// Whether the sankey may group devices by floor and area, as the native
+// view decides it: not when a device included in another's figure sits in
+// a different area from it, since the grouping would then split the pair.
+function groupedByPlace(devices, hass) {
+  if (!devices.some((device) => device.included_in_stat)) return true;
+  const areaOf = (statistic) => {
+    const entity = hass.entities?.[statistic];
+    if (!entity) return undefined;
+    let device = entity.device_id ? hass.devices?.[entity.device_id] : undefined;
+    let area = entity.area_id;
+    while (!area && device) {
+      area = device.area_id;
+      device = device.parent_device_id ? hass.devices?.[device.parent_device_id] : undefined;
+    }
+    return area || undefined;
+  };
+  const byStatistic = new Map(devices.map((device) => [device.stat_consumption, device]));
+  for (const device of devices) {
+    if (!device.included_in_stat) continue;
+    const parent = byStatistic.get(device.included_in_stat);
+    if (!parent || !device.stat_rate || !parent.stat_rate) continue;
+    const own = areaOf(device.stat_rate);
+    const parents = areaOf(parent.stat_rate);
+    if (own && parents && own !== parents) return false;
+  }
+  return true;
 }
 
 // The shape of Home Assistant's own energy view, for the tabs that are
@@ -179,6 +283,7 @@ const BILL_LINES = [
   "vat",
   "total_payable",
   "net_position",
+  "net_position_under_gross",
   "allowance_remaining",
   "period_days",
 ];
@@ -189,10 +294,13 @@ function viewsFor(entry, registry, statistics, prefs, hass, index, several) {
   const named = preferencesOf(prefs);
   const suffix = index ? `-${index + 1}` : "";
   const prefix = several ? `${entry.title}: ` : "";
-  const present = (lines) => lines.map((line) => byLine[line]).filter(Boolean);
+  // Each row named here: the entity's own name carries the device's, which
+  // an entities card shows as is and cuts off on a phone.
   const entities = (title, lines) => {
-    const ids = present(lines);
-    return ids.length ? [{ type: "entities", title, entities: ids }] : [];
+    const rows = lines
+      .filter((line) => byLine[line])
+      .map((line) => ({ entity: byLine[line], name: t(hass, `line_${line}`) }));
+    return rows.length ? [{ type: "entities", title, entities: rows }] : [];
   };
   const graph = (title, kinds) => {
     const ids = kinds.map((kind) => own.ofKind(kind)).filter(Boolean);

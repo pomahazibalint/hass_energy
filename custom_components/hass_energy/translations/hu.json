@@ -59,12 +59,12 @@
         "description": "Add meg a választott naptól érvényes árakat. Hagyd a dátumot a mai napon egy mostantól érvényes változáshoz, vagy állítsd vissza egy később észrevett javításhoz. Az azon a napon már érvényes árak felülíródnak.",
         "data": {
           "valid_from": "Érvényes ettől",
-          "subsidized": "Rezsicsökkentett ár",
-          "market": "Lakossági piaci ár",
+          "subsidized": "Rezsicsökkentett ár, bruttó, ahogy közzéteszik",
+          "market": "Lakossági piaci ár, bruttó, ahogy közzéteszik",
           "feed_in": "Betáplálási ár"
         },
         "data_description": {
-          "feed_in": "A nettósítással el nem számolható termelésért fizetett ár. Jellemzően töredéke annak, amennyibe ugyanaz a kWh vételezve kerül."
+          "feed_in": "A nettósítással el nem számolható termelésért fizetett ár, ÁFA-körön kívül. Jellemzően töredéke annak, amennyibe ugyanaz a kWh vételezve kerül."
         }
       },
       "remove_price": {
@@ -127,6 +127,9 @@
       },
       "net_position": {
         "name": "Egyenleg"
+      },
+      "net_position_under_gross": {
+        "name": "Egyenleg bruttó elszámolással"
       },
       "period_days": {
         "name": "Elszámolási időszak hossza"

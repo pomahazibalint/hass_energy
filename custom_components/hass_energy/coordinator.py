@@ -608,8 +608,9 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
             a_year_before(period.end),
             without_solar=without_solar,
         )
-        if without_solar:
-            hours = [hour.without_solar() for hour in hours]
+        settled: Sequence[Hour] = (
+            [hour.without_solar() for hour in hours] if without_solar else hours
+        )
 
         so_far: dict[date, Day] = {}
         for hour in observed.hours:
@@ -637,7 +638,7 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         projected = project(remaining, so_far, last_year, rate)
         from_last_year = sum(a_year_before(day) in last_year for day, _ in remaining)
         return await self.hass.async_add_executor_job(
-            _outlook, contract, hours, projected, from_last_year, now
+            _outlook, contract, settled, projected, from_last_year, now
         )
 
     def _grid_roles(self) -> dict[str, tuple[str, ...]]:

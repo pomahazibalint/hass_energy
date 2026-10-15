@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 from . import SettlementEntry
 from .settings import battery_from_options, schedule_from_options, terms_from_options
@@ -55,6 +56,15 @@ async def async_get_config_entry_diagnostics(
             "exported_kwh": coordinator.observed.exported_kwh,
             "produced_kwh": coordinator.observed.produced_kwh,
             "unrecorded": coordinator.observed.unrecorded,
+            # Hours set aside as a meter reporting its lifetime total as new
+            # energy, with what the recorder's row still holds for them.
+            "glitches": {
+                source: [
+                    {"start": dt_util.as_local(start).isoformat(timespec="minutes"), "kwh": kwh}
+                    for start, kwh in sorted(hours.items())
+                ]
+                for source, hours in coordinator.observed.glitches.items()
+            },
         }
 
     since = coordinator.house_since()

@@ -23,6 +23,7 @@ from .conftest import (
     coordinator,
     name_sources,
     record,
+    record_rebook,
     refresh,
 )
 from .test_costs import rows, states
@@ -424,3 +425,26 @@ async def test_without_panels_there_is_no_saving_to_report(
     assert house is not None
     assert "saved_by_panels" not in house.attributes
 
+
+
+async def test_a_device_meter_that_reports_its_lifetime_total_is_set_aside(
+    entry: MockConfigEntry, hass: HomeAssistant
+) -> None:
+    """A plug that leaps by its own reading is a glitch, not a burst."""
+
+    await name_sources(hass, devices=[device(WASHER, name="Washer")])
+    await record(hass, IMPORT_ENTITY, DAY_START, [1.0, 1.0])
+    await record(hass, WASHER, DAY_START, [0.5, 0.5])
+    booked = await record_rebook(hass, WASHER, DAY_START + timedelta(hours=1))
+    await refresh(hass, entry)
+
+    hourly = states(await rows(hass, entry, device_rows(entry, WASHER)))
+    assert hourly[:2] == pytest.approx([0.5 * BAND, 0.0], abs=1e-4)
+    registry = ir.async_get(hass)
+    assert registry.async_get_issue(DOMAIN, f"device_bursts_{entry.entry_id}") is None
+    issue = registry.async_get_issue(DOMAIN, f"source_glitches_{entry.entry_id}")
+    assert issue is not None
+    placeholders = issue.translation_placeholders or {}
+    assert placeholders["sources"].startswith(f"{WASHER} (1 h, {booked:.1f} kWh, ")
+    report = await async_get_config_entry_diagnostics(hass, entry)
+    assert report["devices"][0]["kwh"] == pytest.approx(0.5)

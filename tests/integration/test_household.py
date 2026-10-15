@@ -43,6 +43,7 @@ from .conftest import (
     local_midnight,
     name_sources,
     record,
+    record_rebook,
     refresh,
 )
 from .test_costs import rows, states
@@ -448,3 +449,64 @@ async def test_reloading_the_entry_does_not_leave_a_listener_behind(
     assert len(hass.data[FOLLOWERS]) == 1
     await name_sources(hass, solar=[PRODUCTION_ENTITY])
     assert coordinator(entry).sources.production == (PRODUCTION_ENTITY,)
+
+
+async def test_a_meter_that_reports_its_lifetime_total_is_set_aside(
+    entry: MockConfigEntry, hass: HomeAssistant
+) -> None:
+    """An inverter reads zero for a moment, and the recorder books its reading as new energy."""
+
+    await name_sources(hass, solar=[PRODUCTION_ENTITY])
+    await record(hass, IMPORT_ENTITY, DAY_START, [0.5, 0.5, 0.5])
+    await record(hass, EXPORT_ENTITY, DAY_START, [0.0, 0.0, 0.0])
+    await record(hass, PRODUCTION_ENTITY, DAY_START, [1.0, 1.0, 1.0])
+    booked = await record_rebook(hass, PRODUCTION_ENTITY, DAY_START + timedelta(hours=1))
+    await refresh(hass, entry)
+
+    # The hour is read as one the inverter reported nothing in.
+    assert states(await rows(hass, entry, HOUSE_CONSUMPTION))[:3] == [1.5, 0.5, 1.5]
+    assert float(state_of(hass, "house_consumption")) == pytest.approx(3.5)
+    registry = ir.async_get(hass)
+    issue = registry.async_get_issue(DOMAIN, f"source_glitches_{entry.entry_id}")
+    assert issue is not None
+    when = dt_util.as_local(DAY_START + timedelta(hours=1)).isoformat(timespec="minutes")
+    assert issue.translation_placeholders == {
+        "sources": f"{PRODUCTION_ENTITY} (1 h, {booked:.1f} kWh, {when})",
+        "ceiling": "200",
+    }
+    # Nothing left the house that never entered it; that repair stays quiet.
+    assert registry.async_get_issue(DOMAIN, f"sources_disagree_{entry.entry_id}") is None
+    report = await async_get_config_entry_diagnostics(hass, entry)
+    assert report["observed"]["produced_kwh"] == pytest.approx(2.0)
+    assert report["observed"]["glitches"] == {
+        PRODUCTION_ENTITY: [{"start": when, "kwh": pytest.approx(booked)}]
+    }
+
+    # Repaired on the Statistics page, the hour is an ordinary one again.
+    await record(hass, PRODUCTION_ENTITY, DAY_START, [1.0, 1.0, 1.0])
+    await refresh(hass, entry)
+
+    assert registry.async_get_issue(DOMAIN, f"source_glitches_{entry.entry_id}") is None
+    assert states(await rows(hass, entry, HOUSE_CONSUMPTION))[:3] == [1.5, 1.5, 1.5]
+    report = await async_get_config_entry_diagnostics(hass, entry)
+    assert report["observed"]["glitches"] == {}
+
+
+async def test_a_glitched_hour_is_named_among_the_disagreeing_hours(
+    entry: MockConfigEntry, hass: HomeAssistant
+) -> None:
+    """Export the grid meter counted against production the glitch took away."""
+
+    await name_sources(hass, solar=[PRODUCTION_ENTITY])
+    await record(hass, IMPORT_ENTITY, DAY_START, [0.0, 0.0])
+    await record(hass, EXPORT_ENTITY, DAY_START, [1.0, 3.0])
+    await record(hass, PRODUCTION_ENTITY, DAY_START, [1.0, 1.0])
+    await record_rebook(hass, PRODUCTION_ENTITY, DAY_START + timedelta(hours=1))
+    await refresh(hass, entry)
+
+    report = await async_get_config_entry_diagnostics(hass, entry)
+    worst = report["disagreement"]["worst_hours"]
+    assert len(worst) == 1
+    assert worst[0]["lost_kwh"] == pytest.approx(3.0)
+    assert worst[0]["no_row"] == []
+    assert worst[0]["glitched"] == [PRODUCTION_ENTITY]

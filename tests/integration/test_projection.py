@@ -21,6 +21,7 @@ from .conftest import (
     coordinator,
     local_midnight,
     record,
+    record_rebook,
     refresh,
 )
 from .test_sensor import PREFIX, state_of
@@ -173,3 +174,26 @@ async def test_a_battery_is_priced_under_gross_settlement(
         "round_trip_efficiency": 1.0,
         "saving": int(saving),
     }
+
+
+async def test_a_glitched_day_last_year_is_not_the_shape(
+    entry: MockConfigEntry, hass: HomeAssistant
+) -> None:
+    """A day last year in which the meter's reading was booked as new is read as nothing."""
+
+    last_year = date(2025, 10, 1)
+    await record_days(hass, IMPORT_ENTITY, last_year, [10.0] * 20)
+    # 15 October 2025 is one of the days still to come this period.
+    await record_rebook(hass, IMPORT_ENTITY, local_midnight(date(2025, 10, 15)))
+    await record_days(hass, IMPORT_ENTITY, START, [20.0] * 10)
+    await coordinator(entry).async_close_settlement(START)
+    await hass.async_block_till_done()
+
+    outlook = coordinator(entry).outlook
+    assert outlook is not None
+    assert outlook.days_from_last_year == 10
+    so_far = 200.0
+    # The glitched day follows last year's shape as a day of nothing.
+    from_last_year = 10 * 2 * TODAY_LEFT + 8 * 20.0
+    straight = 345 * 20.0
+    assert outlook.bill.billed_kwh == pytest.approx(so_far + from_last_year + straight)

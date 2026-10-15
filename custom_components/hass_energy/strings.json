@@ -241,6 +241,10 @@
       "title": "Energy source sensors have no statistics",
       "description": "The recorder has never compiled statistics for {entities}. The settlement is read from long-term statistics, so nothing from these sources counts until they are recorded with a total state class and a kWh unit."
     },
+    "source_glitches": {
+      "title": "Energy sources reported impossible hours",
+      "description": "{sources}: each with how many hours, the energy booked in them and the latest such hour. An hour with more than {ceiling} kWh in it that is also the size of the meter's own reading is not energy a household meter counted; it is the reading booked as if it were new, which happens when an inverter reads zero for a moment as it starts or stops. The recorder takes the zero for a meter reset and books the reading that follows in full. The settlement reads such an hour as one the source reported nothing in, so nothing here is inflated, but the recorder's own row still carries the figure: the energy dashboard draws it and the statistic's sum stays wrong until the hour is repaired on the Developer tools Statistics page by adjusting its sum. A template sensor that is unavailable instead of zero keeps the glitch out of the recorder for good."
+    },
     "sources_disagree": {
       "title": "Energy sources disagree in {hours} hours",
       "description": "In {hours} hours of the settlement period more energy left the house than entered it, {lost_kwh} kWh in all, worst in the hour starting {worst}. That cannot happen, so either a source has no statistics for the hour at all, such as an inverter whose sensors dropped out while the grid meter kept counting, or one is reporting in the wrong hour: an inverter that lags the grid meter, or a production meter that counts what charged the battery. The energy dashboard reads the same rows and overstates consumption by the same amount. The integration's diagnostics list the worst hours with what every source had and which had nothing; compare them with the energy dashboard's view of that day."

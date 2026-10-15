@@ -12,6 +12,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from functools import partial
+from typing import Final
 
 from homeassistant.components.recorder.statistics import (
     get_metadata,
@@ -33,6 +34,34 @@ KWH = "kWh"
 #: what the house did with what the grid record shows.
 ROLES = ("imported", "exported", "produced", "charged", "discharged")
 GRID_ROLES = ROLES[:2]
+
+#: More than a household source can have moved in one hour. A three-phase
+#: 63 A connection carries 43 kW, and a device meter that books a whole
+#: session into the hour it ended stays well under this.
+IMPLAUSIBLE_HOURLY_KWH: Final = 200.0
+#: An hour's change at least this share of the meter's reading is the
+#: reading itself booked as new energy, not energy counted in the hour.
+REBOOKED_SHARE: Final = 0.9
+
+
+def rebooked(change: float, state: float | None, *, hours: float = 1.0) -> bool:
+    """Whether a change is a meter's reading booked as if it were new energy.
+
+    A glitching inverter reads zero for a moment as it starts or stops and
+    then its lifetime total again. The recorder takes the zero for a meter
+    reset and books the total that follows in full, so the hour's change is
+    the reading itself, a positive figure like any other. The recorder's
+    reset detection is the mechanism, not a guard against it, so the guard
+    is here: a change that is more than a meter can count in the time and
+    is the size of the reading it ends on. A row without a reading, as an
+    imported statistic may be, cannot be judged and is not.
+    """
+
+    return (
+        change > IMPLAUSIBLE_HOURLY_KWH * hours
+        and state is not None
+        and change >= REBOOKED_SHARE * state
+    )
 
 
 @dataclass(frozen=True)
@@ -70,6 +99,16 @@ class Observed:
     #: a row is one the source did not report, which reads as zero and is
     #: worth telling apart from a zero it reported.
     reported: dict[str, frozenset[float]] = field(default_factory=dict)
+    #: Hours in which a source's reading was booked as new energy, by
+    #: source and the hour's start, with the kWh booked. Each is read as
+    #: an hour the source reported nothing in; the recorder's row still
+    #: carries the figure until it is repaired.
+    glitches: dict[str, dict[datetime, float]] = field(default_factory=dict)
+
+    def glitched_in(self, hour: datetime) -> list[str]:
+        """The sources whose row for an hour was set aside as impossible."""
+
+        return [source for source in self.sources if hour in self.glitches.get(source, {})]
 
     def silent_in(self, hour: datetime) -> list[str]:
         """The sources that have no row for an hour."""
@@ -115,7 +154,10 @@ async def async_observe(
     summed. ``devices`` are read alongside, each on its own. ``start`` must
     be on an hour. The recorder converts units, so a source in Wh or MWh
     comes back in kWh. An hour without a row is an hour the source did not
-    report, which costs nothing and is not an error.
+    report, which costs nothing and is not an error. An hour whose change is
+    the meter's own reading, see ``rebooked``, is a glitch the recorder
+    booked as energy; it is read as an hour the source reported nothing in,
+    and returned in ``glitches`` to be reported, never summed.
 
     The household's other sources are taken only where the grid record
     exists and every one of them has begun. An hour the grid meters did not
@@ -135,18 +177,25 @@ async def async_observe(
         wanted,
         "hour",
         {"energy": KWH},
-        {"change"},
+        {"change", "state"},
     )
     metadata = await instance.async_add_executor_job(
         partial(get_metadata, hass, statistic_ids=wanted)
     )
 
     # A total sensor may fall; the recorder reports that as a negative
-    # change, and energy cannot be negative.
-    changes = {
-        source: {row["start"]: max(row.get("change") or 0.0, 0.0) for row in rows.get(source, [])}
-        for source in wanted
-    }
+    # change, and energy cannot be negative. It may also leap by its whole
+    # reading, which the recorder reports as a positive change like any
+    # other, and that is set aside rather than summed.
+    changes: dict[str, dict[float, float]] = {source: {} for source in wanted}
+    glitches: dict[str, dict[datetime, float]] = {}
+    for source in wanted:
+        for row in rows.get(source, []):
+            change = max(row.get("change") or 0.0, 0.0)
+            if rebooked(change, row.get("state")):
+                glitches.setdefault(source, {})[dt_util.utc_from_timestamp(row["start"])] = change
+                change = 0.0
+            changes[source][row["start"]] = change
     first_of = {
         source: dt_util.utc_from_timestamp(min(per_source))
         for source, per_source in changes.items()
@@ -192,6 +241,7 @@ async def async_observe(
         sources=[*sources, *devices],
         last_of=last_of,
         reported={source: frozenset(per_source) for source, per_source in changes.items()},
+        glitches=glitches,
     )
 
 
@@ -208,7 +258,9 @@ async def async_observe_days(
     For the projection's long view: the same days a year earlier, which the
     recorder already holds as statistics, reduced to days the way the
     dashboard's own day view reduces them. A day without a row is absent,
-    not zero, because the projection has to know the difference.
+    not zero, because the projection has to know the difference. A day whose
+    change is the meter's own reading is the glitch ``async_observe`` sets
+    aside, and it is read as nothing here too.
 
     ``without_solar`` reads the production as well and returns the grid day
     there would have been with no panels, the day's flows as the hour's
@@ -226,7 +278,7 @@ async def async_observe_days(
         set(sources),
         "day",
         {"energy": KWH},
-        {"change"},
+        {"change", "state"},
     )
     totals: dict[date, dict[str, float]] = {}
     for role in read:
@@ -234,7 +286,10 @@ async def async_observe_days(
             for row in rows.get(source, []):
                 day = dt_util.as_local(dt_util.utc_from_timestamp(row["start"])).date()
                 per_role = totals.setdefault(day, {})
-                per_role[role] = per_role.get(role, 0.0) + max(row.get("change") or 0.0, 0.0)
+                change = max(row.get("change") or 0.0, 0.0)
+                if rebooked(change, row.get("state"), hours=24):
+                    change = 0.0
+                per_role[role] = per_role.get(role, 0.0) + change
     days = {}
     for day, per_role in sorted(totals.items()):
         imported = per_role.get("imported", 0.0)

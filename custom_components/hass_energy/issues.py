@@ -148,6 +148,38 @@ def sources_disagree(
     )
 
 
+def source_glitches(
+    hass: HomeAssistant,
+    entry_id: str,
+    glitches: dict[str, dict[datetime, float]],
+    ceiling_kwh: float,
+) -> None:
+    """A source claimed more energy in an hour than a meter can count.
+
+    An inverter that reads zero for a moment and then its lifetime total
+    again: the recorder takes the zero for a meter reset and books the total
+    that follows as new energy. The hour is read as nothing here, but the
+    recorder's own row still carries it, the energy dashboard draws it, and
+    only a repair on the Statistics page removes it.
+    """
+
+    _set(
+        hass,
+        entry_id,
+        "source_glitches",
+        active=bool(glitches),
+        placeholders={
+            # Words belong to the translation; the placeholder carries data.
+            "sources": "; ".join(
+                f"{source} ({len(hours)} h, {sum(hours.values()):.1f} kWh, "
+                f"{dt_util.as_local(max(hours)).isoformat(timespec='minutes')})"
+                for source, hours in glitches.items()
+            ),
+            "ceiling": f"{ceiling_kwh:.0f}",
+        },
+    )
+
+
 def device_bursts(hass: HomeAssistant, entry_id: str, bursts: dict[str, tuple[int, float]]) -> None:
     """A device meter claimed more in an hour than the whole house used.
 

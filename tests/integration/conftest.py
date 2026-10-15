@@ -41,6 +41,11 @@ PRODUCTION_ENTITY = "sensor.solar_production_energy"
 BATTERY_CHARGE_ENTITY = "sensor.battery_charge_energy"
 BATTERY_DISCHARGE_ENTITY = "sensor.battery_discharge_energy"
 
+#: What every recorded meter already read when its record began. A real
+#: reading stands far above anything one period adds to it, and the guard
+#: against a meter's reading being booked as new energy relies on that.
+READING = 10_000.0
+
 #: The test instance runs on US/Pacific. 20:00 UTC is 13:00 local, so the
 #: local day began at 07:00 UTC and thirteen complete hours of it exist.
 NOW = datetime(2026, 10, 11, 20, 0, tzinfo=UTC)
@@ -109,14 +114,43 @@ async def record(
     ``start`` is the first hour's UTC start; each quantity is one hour's kWh.
     The recorder derives an hour's change from consecutive sums, so every call
     rewrites the source's whole series with the sums recomputed in time order,
-    which lets a test record hours in any order.
+    which lets a test record hours in any order. The meter's reading is
+    ``READING`` plus what it has counted, as a real meter's is.
     """
 
     recorded: dict[str, dict[datetime, float]] = hass.data.setdefault("_test_recorded", {})
     series = recorded.setdefault(entity_id, {})
+    rebooked: set[datetime] = hass.data.setdefault("_test_rebooked", {}).get(entity_id, set())
     for i, kwh in enumerate(kwh_per_hour):
         series[start + timedelta(hours=i)] = kwh
+        # Recording an hour anew is repairing it on the Statistics page.
+        rebooked.discard(start + timedelta(hours=i))
+    await _rewrite(hass, entity_id)
 
+
+async def record_rebook(hass: HomeAssistant, entity_id: str, hour: datetime) -> float:
+    """Book the meter's reading into an hour as new energy, as the recorder does.
+
+    The glitch of an inverter that reads zero for a moment: the recorder
+    takes the zero for a meter reset and adds the reading that follows to
+    the sum in full, while the reading itself stands where it was. Returns
+    the energy the hour is left claiming, the reading plus the hour's own.
+    """
+
+    rebooked: dict[str, set[datetime]] = hass.data.setdefault("_test_rebooked", {})
+    rebooked.setdefault(entity_id, set()).add(hour)
+    await _rewrite(hass, entity_id)
+    counted = 0.0
+    for when, kwh in sorted(hass.data["_test_recorded"][entity_id].items()):
+        counted += kwh
+        if when == hour:
+            return READING + counted + kwh
+    raise AssertionError(f"{entity_id} has no row for {hour}")
+
+
+async def _rewrite(hass: HomeAssistant, entity_id: str) -> None:
+    series: dict[datetime, float] = hass.data["_test_recorded"][entity_id]
+    rebooked: set[datetime] = hass.data.get("_test_rebooked", {}).get(entity_id, set())
     metadata = StatisticMetaData(
         mean_type=StatisticMeanType.NONE,
         has_sum=True,
@@ -126,11 +160,15 @@ async def record(
         unit_class="energy",
         unit_of_measurement="kWh",
     )
+    counted = 0.0
     running = 0.0
     rows: list[StatisticData] = []
     for hour in sorted(series):
+        counted += series[hour]
         running += series[hour]
-        rows.append(StatisticData(start=hour, state=running, sum=running))
+        if hour in rebooked:
+            running += READING + counted
+        rows.append(StatisticData(start=hour, state=READING + counted, sum=running))
     async_import_statistics(hass, metadata, rows)
     await async_wait_recording_done(hass)
 

@@ -74,7 +74,7 @@ from .costs import (
     async_publish,
     device_kind,
 )
-from .history import Observed, async_observe, async_observe_days
+from .history import IMPLAUSIBLE_HOURLY_KWH, Observed, async_observe, async_observe_days
 from .preferences import Sources, async_follow, async_sources
 from .settings import (
     Battery,
@@ -272,7 +272,7 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
     """Settles the period from the recorder's hourly statistics."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=None)
+        super().__init__(hass, _LOGGER, config_entry=entry, name=DOMAIN, update_interval=None)
         self.entry = entry
         self._store = SettlementStore(hass, STORAGE_VERSION, f"{STORAGE_KEY}.{entry.entry_id}")
         self.state = PeriodState(start=dt_util.now().date())
@@ -383,6 +383,9 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
         self.observed = observed
         issues.source_unrecorded(self.hass, self.entry.entry_id, observed.unrecorded)
         issues.source_stale(self.hass, self.entry.entry_id, self.stale_sources(), STALE_AFTER.days)
+        issues.source_glitches(
+            self.hass, self.entry.entry_id, observed.glitches, IMPLAUSIBLE_HOURLY_KWH
+        )
         self.device_excess = self._device_excess(observed)
         self.disagreement = Disagreement.over(self._losses(observed))
         issues.sources_disagree(
@@ -746,6 +749,7 @@ class SettlementCoordinator(DataUpdateCoordinator[Bill]):
                     statistic: kwh[index[start]] for statistic, kwh in observed.devices.items()
                 },
                 "no_row": observed.silent_in(start),
+                "glitched": observed.glitched_in(start),
             }
             for start in worst
         ]

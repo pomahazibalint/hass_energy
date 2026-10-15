@@ -67,7 +67,11 @@ statistic: what the bill would have been without the panels, less what it is.
 A repair issue reports hours in which more energy left the house than entered
 it, which is a source reporting in the wrong hour; the native dashboard reads
 the same rows and overstates consumption by the same amount without saying
-so.
+so. An hour in which a source leaps by its own meter reading, more than 200
+kWh, is that reading booked as new energy, which the recorder does when an
+inverter reads zero for a moment as it starts or stops: the hour is read as
+nothing, a repair names it, and the recorder's own row is repaired on the
+Statistics page as any outlier is, since the native dashboard still draws it.
 
 What consuming cost is published too, as a **consumption cost** statistic
 and sensor: what each hour would have saved had nothing been consumed in it,

@@ -179,6 +179,18 @@ per-hour energy for the whole period, including hours before the integration
 was installed, as long as the sensors were recorded. Every figure with a
 currency on it is derived from them on demand.
 
+The recorder's reset detection is not a guard against every outlier; for one
+it is the cause. A total-increasing sensor that reads zero for a moment, as a
+glitching inverter does at start-up and shutdown, is taken for a meter reset,
+and the lifetime total it reports a moment later is booked in full as new
+energy, a positive change like any other. So the one guard the integration
+keeps is in `history.py`: an hour whose change is more than a household meter
+can count and the size of the reading the hour ends on is that reading
+booked, not energy. It is read as nothing, named in a repair, and left in the
+recorder for the user to repair, because the native dashboard reads the same
+row. A ceiling alone would not do: a charger's session booked into the hour
+it ended is a big hour that is real.
+
 That is what makes the contract editable. A corrected price, a switched
 allowance basis or a changed standing charge re-values the same hours instead
 of contradicting them, and a price backdated into the period applies to the
